@@ -1,0 +1,43 @@
+[0.107s] Invoking command in '/home/kevin/dev/lidarws/src/tilt_coordinator': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest
+[0.261s] ============================= test session starts ==============================
+[0.261s] platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+[0.261s] cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+[0.261s] rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+[0.261s] plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+[0.261s] collected 17 items
+[0.261s] 
+[0.280s] test/test_coordinator.py F............                                   [ 76%]
+[0.282s] test/test_tilt_serial.py ....                                            [100%]
+[0.282s] 
+[0.282s] =================================== FAILURES ===================================
+[0.282s] ___________________________ test_tilt_math_doctests ____________________________
+[0.282s] test/test_coordinator.py:103: in test_tilt_math_doctests
+[0.282s]     assert results.failed == 0
+[0.282s] E   assert 2 == 0
+[0.282s] E    +  where 2 = TestResults(failed=2, attempted=27).failed
+[0.282s] ----------------------------- Captured stdout call -----------------------------
+[0.282s] **********************************************************************
+[0.282s] File "/home/kevin/dev/lidarws/src/tilt_coordinator/tilt_coordinator/tilt_math.py", line 117, in tilt_coordinator.tilt_math.ray_to_world
+[0.282s] Failed example:
+[0.282s]     ray_to_world(0.0, 0.0, 2.0)
+[0.282s] Expected:
+[0.282s]     (2.0, 0.0, 0.0)
+[0.282s] Got:
+[0.282s]     (2.0, -0.0, 0.0)
+[0.282s] **********************************************************************
+[0.282s] File "/home/kevin/dev/lidarws/src/tilt_coordinator/tilt_coordinator/tilt_math.py", line 121, in tilt_coordinator.tilt_math.ray_to_world
+[0.282s] Failed example:
+[0.282s]     [round(v, 9) for v in ray_to_world(0.0, 90.0, 1.0)]
+[0.282s] Expected:
+[0.282s]     [0.0, 0.0, 1.0]
+[0.282s] Got:
+[0.282s]     [0.0, -0.0, 1.0]
+[0.283s] **********************************************************************
+[0.283s] 1 items had failures:
+[0.283s]    2 of   5 in tilt_coordinator.tilt_math.ray_to_world
+[0.283s] ***Test Failed*** 2 failures.
+[0.283s] - generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+[0.283s] =========================== short test summary info ============================
+[0.283s] FAILED test/test_coordinator.py::test_tilt_math_doctests - assert 2 == 0
+[0.283s] ========================= 1 failed, 16 passed in 0.06s =========================
+[0.306s] Invoked command in '/home/kevin/dev/lidarws/src/tilt_coordinator' returned '1': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest

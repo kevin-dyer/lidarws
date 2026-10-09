@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+collected 19 items / 16 deselected / 3 selected
+
+test/test_coordinator.py ...                                             [100%]
+
+- generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+======================= 3 passed, 16 deselected in 0.05s =======================

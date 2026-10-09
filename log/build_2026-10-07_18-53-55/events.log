@@ -1,0 +1,6 @@
+[0.000000] (-) TimerEvent: {}
+[0.000058] (-) JobUnselected: {'identifier': 'rplidar_driver'}
+[0.000112] (tilt_coordinator) JobQueued: {'identifier': 'tilt_coordinator', 'dependencies': OrderedDict([('rplidar_driver', '/home/kevin/dev/lidarws/install/rplidar_driver')])}
+[0.000400] (tilt_coordinator) JobStarted: {'identifier': 'tilt_coordinator'}
+[0.004075] (tilt_coordinator) JobEnded: {'identifier': 'tilt_coordinator', 'rc': 1}
+[0.014241] (-) EventReactorShutdown: {}

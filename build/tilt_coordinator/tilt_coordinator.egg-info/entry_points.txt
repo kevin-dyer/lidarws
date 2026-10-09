@@ -1,0 +1,4 @@
+[console_scripts]
+mesh_postprocessor_node = tilt_coordinator.mesh_postprocessor_node:main
+tilt_coordinator_node = tilt_coordinator.tilt_coordinator_node:main
+

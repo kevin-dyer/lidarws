@@ -1,0 +1,25 @@
+[0.245s] Invoking command in '/home/kevin/dev/lidarws/src/tilt_coordinator': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/kevin/dev/lidarws/build/tilt_coordinator/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/tilt_coordinator build --build-base /home/kevin/dev/lidarws/build/tilt_coordinator/build install --record /home/kevin/dev/lidarws/build/tilt_coordinator/install.log --install-scripts $base/lib/tilt_coordinator --single-version-externally-managed install_data
+[0.340s] running egg_info
+[0.341s] writing ../../build/tilt_coordinator/tilt_coordinator.egg-info/PKG-INFO
+[0.341s] writing dependency_links to ../../build/tilt_coordinator/tilt_coordinator.egg-info/dependency_links.txt
+[0.341s] writing entry points to ../../build/tilt_coordinator/tilt_coordinator.egg-info/entry_points.txt
+[0.341s] writing requirements to ../../build/tilt_coordinator/tilt_coordinator.egg-info/requires.txt
+[0.341s] writing top-level names to ../../build/tilt_coordinator/tilt_coordinator.egg-info/top_level.txt
+[0.341s] reading manifest file '../../build/tilt_coordinator/tilt_coordinator.egg-info/SOURCES.txt'
+[0.342s] writing manifest file '../../build/tilt_coordinator/tilt_coordinator.egg-info/SOURCES.txt'
+[0.342s] running build
+[0.342s] running build_py
+[0.342s] copying tilt_coordinator/mesh_postprocessor_node.py -> /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator
+[0.342s] running install
+[0.342s] running install_lib
+[0.343s] copying /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator/mesh_postprocessor_node.py -> /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator
+[0.343s] byte-compiling /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator/mesh_postprocessor_node.py to mesh_postprocessor_node.cpython-310.pyc
+[0.344s] running install_data
+[0.344s] running install_egg_info
+[0.344s] removing '/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator-0.1.0-py3.10.egg-info' (and everything under it)
+[0.345s] Copying ../../build/tilt_coordinator/tilt_coordinator.egg-info to /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator-0.1.0-py3.10.egg-info
+[0.345s] running install_scripts
+[0.353s] Installing mesh_postprocessor_node script to /home/kevin/dev/lidarws/install/tilt_coordinator/lib/tilt_coordinator
+[0.353s] Installing tilt_coordinator_node script to /home/kevin/dev/lidarws/install/tilt_coordinator/lib/tilt_coordinator
+[0.353s] writing list of installed files to '/home/kevin/dev/lidarws/build/tilt_coordinator/install.log'
+[0.364s] Invoked command in '/home/kevin/dev/lidarws/src/tilt_coordinator' returned '0': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/kevin/dev/lidarws/build/tilt_coordinator/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/tilt_coordinator build --build-base /home/kevin/dev/lidarws/build/tilt_coordinator/build install --record /home/kevin/dev/lidarws/build/tilt_coordinator/install.log --install-scripts $base/lib/tilt_coordinator --single-version-externally-managed install_data

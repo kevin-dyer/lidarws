@@ -1,0 +1,19 @@
+-- run_test.py: invoking following command in '/home/kevin/dev/lidarws/build/rplidar_driver':
+ - /home/kevin/dev/lidarws/build/rplidar_driver/test_rplidar_wrapper --gtest_output=xml:/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml
+
+Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from MockDriverTest
+[ RUN      ] MockDriverTest.ScanDataSanityCheck
+[       OK ] MockDriverTest.ScanDataSanityCheck (10 ms)
+[----------] 1 test from MockDriverTest (10 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (10 ms total)
+[  PASSED  ] 1 test.
+
+
+-- run_test.py: return code 0
+-- run_test.py: inject classname prefix into gtest result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml'
+-- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml'

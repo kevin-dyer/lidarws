@@ -1,0 +1,15 @@
+[0.104s] Invoking command in '/home/kevin/dev/lidarws/src/tilt_coordinator': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache -k "not test_cloud_accumulator and not test_default_cloud_range_accepts_longer_lidar_returns" PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest
+[0.348s] ============================= test session starts ==============================
+[0.348s] platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+[0.348s] cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+[0.348s] rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+[0.348s] plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+[0.348s] collected 21 items / 3 deselected / 18 selected
+[0.348s] 
+[0.355s] test/test_coordinator.py ............                                    [ 66%]
+[0.356s] test/test_mesh_postprocessor.py ..                                       [ 77%]
+[0.357s] test/test_tilt_serial.py ....                                            [100%]
+[0.357s] 
+[0.357s] - generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+[0.357s] ======================= 18 passed, 3 deselected in 0.14s =======================
+[0.389s] Invoked command in '/home/kevin/dev/lidarws/src/tilt_coordinator' returned '0': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache -k "not test_cloud_accumulator and not test_default_cloud_range_accepts_longer_lidar_returns" PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest

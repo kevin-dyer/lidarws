@@ -1,0 +1,25 @@
+running egg_info
+writing ../../build/tilt_coordinator/tilt_coordinator.egg-info/PKG-INFO
+writing dependency_links to ../../build/tilt_coordinator/tilt_coordinator.egg-info/dependency_links.txt
+writing entry points to ../../build/tilt_coordinator/tilt_coordinator.egg-info/entry_points.txt
+writing requirements to ../../build/tilt_coordinator/tilt_coordinator.egg-info/requires.txt
+writing top-level names to ../../build/tilt_coordinator/tilt_coordinator.egg-info/top_level.txt
+reading manifest file '../../build/tilt_coordinator/tilt_coordinator.egg-info/SOURCES.txt'
+writing manifest file '../../build/tilt_coordinator/tilt_coordinator.egg-info/SOURCES.txt'
+running build
+running build_py
+copying tilt_coordinator/coordinator.py -> /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator
+copying tilt_coordinator/tilt_coordinator_node.py -> /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator
+running install
+running install_lib
+copying /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator/coordinator.py -> /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator
+copying /home/kevin/dev/lidarws/build/tilt_coordinator/build/lib/tilt_coordinator/tilt_coordinator_node.py -> /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator
+byte-compiling /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator/coordinator.py to coordinator.cpython-310.pyc
+byte-compiling /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator/tilt_coordinator_node.py to tilt_coordinator_node.cpython-310.pyc
+running install_data
+running install_egg_info
+removing '/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator-0.1.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/tilt_coordinator/tilt_coordinator.egg-info to /home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages/tilt_coordinator-0.1.0-py3.10.egg-info
+running install_scripts
+Installing tilt_coordinator_node script to /home/kevin/dev/lidarws/install/tilt_coordinator/lib/tilt_coordinator
+writing list of installed files to '/home/kevin/dev/lidarws/build/tilt_coordinator/install.log'

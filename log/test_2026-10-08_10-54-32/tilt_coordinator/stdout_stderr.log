@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+collected 11 items
+
+test/test_coordinator.py ....F.....                                      [ 90%]
+test/test_tilt_serial.py .                                               [100%]
+
+=================================== FAILURES ===================================
+______________ test_validate_tilt_states_enforces_firmware_limits ______________
+test/test_coordinator.py:135: in test_validate_tilt_states_enforces_firmware_limits
+    validate_tilt_states([State('B', float('nan'), 0.0, 0.0)])
+tilt_coordinator/coordinator.py:36: in validate_tilt_states
+    raise ValueError(
+E   ValueError: B target_angle=nan exceeds the tilt stage limit of +/-45.0 degrees
+
+During handling of the above exception, another exception occurred:
+test/test_coordinator.py:134: in test_validate_tilt_states_enforces_firmware_limits
+    with pytest.raises(ValueError, match='position B target_angle'):
+E   AssertionError: Regex pattern 'position B target_angle' does not match 'B target_angle=nan exceeds the tilt stage limit of +/-45.0 degrees'.
+- generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+=========================== short test summary info ============================
+FAILED test/test_coordinator.py::test_validate_tilt_states_enforces_firmware_limits
+========================= 1 failed, 10 passed in 0.06s =========================

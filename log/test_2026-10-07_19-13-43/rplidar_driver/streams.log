@@ -1,0 +1,300 @@
+[0.107s] Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} /usr/bin/ctest -C Release -D ExperimentalTest --no-compress-output -V --force-new-ctest-process
+[0.110s] UpdateCTestConfiguration  from :/home/kevin/dev/lidarws/build/rplidar_driver/CTestConfiguration.ini
+[0.110s] Parse Config file:/home/kevin/dev/lidarws/build/rplidar_driver/CTestConfiguration.ini
+[0.110s]    Site: kevin-B650-AORUS-ELITE-AX
+[0.110s]    Build name: (empty)
+[0.110s]  Add coverage exclude regular expressions.
+[0.110s] Create new tag: 20261008-0213 - Experimental
+[0.110s] UpdateCTestConfiguration  from :/home/kevin/dev/lidarws/build/rplidar_driver/CTestConfiguration.ini
+[0.110s] Parse Config file:/home/kevin/dev/lidarws/build/rplidar_driver/CTestConfiguration.ini
+[0.110s] Test project /home/kevin/dev/lidarws/build/rplidar_driver
+[0.110s] Constructing a list of tests
+[0.110s] Done constructing a list of tests
+[0.111s] Updating test list for fixtures
+[0.111s] Added 0 tests to meet fixture requirements
+[0.111s] Checking test dependency graph...
+[0.111s] Checking test dependency graph end
+[0.111s] test 1
+[0.111s]     Start 1: test_rplidar_wrapper
+[0.111s] 
+[0.111s] 1: Test command: /usr/bin/python3 "-u" "/opt/ros/humble/share/ament_cmake_test/cmake/run_test.py" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml" "--package-name" "rplidar_driver" "--output-file" "/home/kevin/dev/lidarws/build/rplidar_driver/ament_cmake_gtest/test_rplidar_wrapper.txt" "--command" "/home/kevin/dev/lidarws/build/rplidar_driver/test_rplidar_wrapper" "--gtest_output=xml:/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml"
+[0.111s] 1: Test timeout computed to be: 60
+[0.135s] 1: -- run_test.py: invoking following command in '/home/kevin/dev/lidarws/build/rplidar_driver':
+[0.135s] 1:  - /home/kevin/dev/lidarws/build/rplidar_driver/test_rplidar_wrapper --gtest_output=xml:/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml
+[0.138s] 1: Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[0.138s] 1: [==========] Running 1 test from 1 test suite.
+[0.138s] 1: [----------] Global test environment set-up.
+[0.138s] 1: [----------] 1 test from MockDriverTest
+[0.138s] 1: [ RUN      ] MockDriverTest.ScanDataSanityCheck
+[0.149s] 1: [       OK ] MockDriverTest.ScanDataSanityCheck (10 ms)
+[0.149s] 1: [----------] 1 test from MockDriverTest (10 ms total)
+[0.149s] 1: 
+[0.149s] 1: [----------] Global test environment tear-down
+[0.149s] 1: [==========] 1 test from 1 test suite ran. (10 ms total)
+[0.149s] 1: [  PASSED  ] 1 test.
+[0.149s] 1: -- run_test.py: return code 0
+[0.149s] 1: -- run_test.py: inject classname prefix into gtest result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml'
+[0.149s] 1: -- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_wrapper.gtest.xml'
+[0.154s] 1/5 Test #1: test_rplidar_wrapper .............   Passed    0.04 sec
+[0.154s] test 2
+[0.154s]     Start 2: test_rplidar_node
+[0.154s] 
+[0.154s] 2: Test command: /usr/bin/python3 "-u" "/opt/ros/humble/share/ament_cmake_test/cmake/run_test.py" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_node.gtest.xml" "--package-name" "rplidar_driver" "--output-file" "/home/kevin/dev/lidarws/build/rplidar_driver/ament_cmake_gtest/test_rplidar_node.txt" "--command" "/home/kevin/dev/lidarws/build/rplidar_driver/test_rplidar_node" "--gtest_output=xml:/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_node.gtest.xml"
+[0.154s] 2: Test timeout computed to be: 60
+[0.179s] 2: -- run_test.py: invoking following command in '/home/kevin/dev/lidarws/build/rplidar_driver':
+[0.179s] 2:  - /home/kevin/dev/lidarws/build/rplidar_driver/test_rplidar_node --gtest_output=xml:/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_node.gtest.xml
+[0.183s] 2: Running main() from /opt/ros/humble/src/gtest_vendor/src/gtest_main.cc
+[0.183s] 2: [==========] Running 8 tests from 1 test suite.
+[0.183s] 2: [----------] Global test environment set-up.
+[0.183s] 2: [----------] 8 tests from RplidarNodeTest
+[0.192s] 2: [ RUN      ] RplidarNodeTest.FullLifecycleTest
+[0.200s] 2: [INFO] [1791425623.325125857] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[0.200s] 2: [INFO] [1791425623.325186293] [rplidar_node]: [Lifecycle] Configuring node...
+[0.200s] 2: [WARN] [1791425623.325259092] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[0.201s] 2: [INFO] [1791425623.325721719] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[0.202s] 2: [WARN] [1791425623.326500731] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[0.202s] 2: [WARN] [1791425623.326526330] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[0.202s] 2: [WARN] [1791425623.326535407] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[0.202s] 2: [INFO] [1791425623.326980139] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[0.202s] 2: [INFO] [1791425623.327040895] [rplidar_node]: [Lifecycle] Activating node...
+[0.202s] 2: [INFO] [1791425623.327086422] [rplidar_node]: [Lifecycle] Deactivating node...
+[0.202s] 2: [INFO] [1791425623.327110769] [rplidar_node]: [FSM] Scan loop started.
+[0.202s] 2: [INFO] [1791425623.327162919] [rplidar_node]: [FSM] Scan loop terminated.
+[0.202s] 2: [INFO] [1791425623.327191864] [rplidar_node]: [Lifecycle] Cleaning up resources...
+[0.203s] 2: [INFO] [1791425623.327436062] [rplidar_node]: [Lifecycle] Destroying node resources...
+[0.204s] 2: [       OK ] RplidarNodeTest.FullLifecycleTest (12 ms)
+[0.204s] 2: [ RUN      ] RplidarNodeTest.ScanPublicationCheck
+[0.205s] 2: [INFO] [1791425623.330095797] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[0.205s] 2: [INFO] [1791425623.330110776] [rplidar_node]: [Lifecycle] Configuring node...
+[0.205s] 2: [WARN] [1791425623.330156052] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[0.205s] 2: [INFO] [1791425623.330275020] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[0.206s] 2: [WARN] [1791425623.330382977] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[0.206s] 2: [WARN] [1791425623.330401452] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[0.206s] 2: [WARN] [1791425623.330410690] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[0.206s] 2: [INFO] [1791425623.330470865] [rplidar_node]: [TF] Broadcasting static transform: base_link -> test_laser_link
+[0.206s] 2: [INFO] [1791425623.330491244] [rplidar_node]: [Lifecycle] Activating node...
+[0.206s] 2: [INFO] [1791425623.330534207] [rplidar_node]: [FSM] Scan loop started.
+[0.206s] 2: [INFO] [1791425623.330553453] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[0.226s] 2: [INFO] [1791425623.350673201] [rplidar_node]: [FSM] Starting motor...
+[0.226s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[0.226s] 2: [INFO] [1791425623.350698770] [rplidar_node]: [Config] Max Range: 40.00 m
+[0.226s] 2: [INFO] [1791425623.350704120] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[0.236s] 2: [INFO] [1791425623.360799848] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[0.256s] 2: [INFO] [1791425623.381193801] [rplidar_node]: [Lifecycle] Deactivating node...
+[0.257s] 2: [INFO] [1791425623.381490269] [rplidar_node]: [FSM] Scan loop terminated.
+[0.257s] 2: [INFO] [1791425623.381715801] [rplidar_node]: [Lifecycle] Destroying node resources...
+[0.257s] 2: [INFO] [1791425623.381731060] [rplidar_node]: [Driver] Stopping motor during destruction...
+[0.258s] 2: [       OK ] RplidarNodeTest.ScanPublicationCheck (55 ms)
+[0.258s] 2: [ RUN      ] RplidarNodeTest.StandbyServiceTogglesScanning
+[0.260s] 2: [INFO] [1791425623.384987828] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[0.261s] 2: [INFO] [1791425623.385607715] [rplidar_node]: [Lifecycle] Configuring node...
+[0.261s] 2: [WARN] [1791425623.385675255] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[0.261s] 2: [INFO] [1791425623.385840401] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[0.261s] 2: [WARN] [1791425623.385981561] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[0.261s] 2: [WARN] [1791425623.386002732] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[0.261s] 2: [WARN] [1791425623.386012601] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[0.261s] 2: [INFO] [1791425623.386101481] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[0.261s] 2: [INFO] [1791425623.386123674] [rplidar_node]: [Lifecycle] Activating node...
+[0.261s] 2: [INFO] [1791425623.386171846] [rplidar_node]: [FSM] Scan loop started.
+[0.261s] 2: [INFO] [1791425623.386208356] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[0.282s] 2: [INFO] [1791425623.406350927] [rplidar_node]: [FSM] Starting motor...
+[0.282s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[0.282s] 2: [INFO] [1791425623.406368120] [rplidar_node]: [Config] Max Range: 40.00 m
+[0.282s] 2: [INFO] [1791425623.406373290] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[0.292s] 2: [INFO] [1791425623.416437267] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[0.765s] 2: [INFO] [1791425623.889950033] [rplidar_node]: [Standby] stop_motor: Standby requested, the motor stops shortly.
+[0.770s] 2: [INFO] [1791425623.894694981] [rplidar_node]: [FSM] Entering STANDBY (stopping motor)...
+[1.569s] 2: [INFO] [1791425624.694147368] [rplidar_node]: [Standby] start_motor: Wake-up requested, the motor restarts shortly.
+[1.574s] 2: [INFO] [1791425624.699149078] [rplidar_node]: [FSM] Leaving STANDBY (restarting motor)...
+[1.584s] 2: [INFO] [1791425624.709237291] [rplidar_node]: [FSM] Starting motor...
+[1.584s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[1.585s] 2: [INFO] [1791425624.709266557] [rplidar_node]: [Config] Max Range: 40.00 m
+[1.585s] 2: [INFO] [1791425624.709273591] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[1.595s] 2: [INFO] [1791425624.719351374] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[3.572s] 2: [INFO] [1791425626.696334975] [rplidar_node]: [Lifecycle] Deactivating node...
+[3.576s] 2: [INFO] [1791425626.701255230] [rplidar_node]: [FSM] Scan loop terminated.
+[3.578s] 2: [INFO] [1791425626.702774510] [rplidar_node]: [Lifecycle] Destroying node resources...
+[3.578s] 2: [INFO] [1791425626.702788566] [rplidar_node]: [Driver] Stopping motor during destruction...
+[3.579s] 2: [       OK ] RplidarNodeTest.StandbyServiceTogglesScanning (3321 ms)
+[3.580s] 2: [ RUN      ] RplidarNodeTest.AutoStandbyFollowsSubscribers
+[3.581s] 2: [INFO] [1791425626.706243745] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[3.582s] 2: [INFO] [1791425626.706810009] [rplidar_node]: [Lifecycle] Configuring node...
+[3.582s] 2: [WARN] [1791425626.706884262] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[3.582s] 2: [INFO] [1791425626.707039359] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[3.582s] 2: [WARN] [1791425626.707172083] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[3.582s] 2: [WARN] [1791425626.707191280] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[3.582s] 2: [WARN] [1791425626.707199405] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[3.582s] 2: [INFO] [1791425626.707273257] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[3.582s] 2: [INFO] [1791425626.707293475] [rplidar_node]: [Lifecycle] Activating node...
+[3.583s] 2: [INFO] [1791425626.707348711] [rplidar_node]: [FSM] Scan loop started.
+[3.583s] 2: [INFO] [1791425626.707419837] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[3.603s] 2: [INFO] [1791425626.727544084] [rplidar_node]: [FSM] Starting motor...
+[3.603s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[3.603s] 2: [INFO] [1791425626.727573320] [rplidar_node]: [Config] Max Range: 40.00 m
+[3.603s] 2: [INFO] [1791425626.727583790] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[3.613s] 2: [INFO] [1791425626.737680038] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[3.786s] 2: [INFO] [1791425626.910732286] [rplidar_node]: [Standby] No subscribers left, going to standby.
+[3.786s] 2: [INFO] [1791425626.910747224] [rplidar_node]: [FSM] Entering STANDBY (stopping motor)...
+[3.988s] 2: [INFO] [1791425627.112036237] [rplidar_node]: [Standby] Subscriber connected, waking up.
+[3.988s] 2: [INFO] [1791425627.112093957] [rplidar_node]: [FSM] Leaving STANDBY (restarting motor)...
+[3.997s] 2: [INFO] [1791425627.122159747] [rplidar_node]: [FSM] Starting motor...
+[3.998s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[3.998s] 2: [INFO] [1791425627.122180567] [rplidar_node]: [Config] Max Range: 40.00 m
+[3.998s] 2: [INFO] [1791425627.122190577] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[4.007s] 2: [INFO] [1791425627.132278479] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[6.840s] 2: [INFO] [1791425629.964416283] [rplidar_node]: [Standby] No subscribers left, going to standby.
+[6.840s] 2: [INFO] [1791425629.964444757] [rplidar_node]: [FSM] Entering STANDBY (stopping motor)...
+[7.491s] 2: [INFO] [1791425630.616044713] [rplidar_node]: [Lifecycle] Deactivating node...
+[7.494s] 2: [INFO] [1791425630.618477542] [rplidar_node]: [FSM] Scan loop terminated.
+[7.495s] 2: [INFO] [1791425630.619385963] [rplidar_node]: [Lifecycle] Destroying node resources...
+[7.495s] 2: [INFO] [1791425630.619407163] [rplidar_node]: [Driver] Stopping motor during destruction...
+[7.496s] 2: [       OK ] RplidarNodeTest.AutoStandbyFollowsSubscribers (3916 ms)
+[7.496s] 2: [ RUN      ] RplidarNodeTest.AutoStandbyIgnoresStopMotorService
+[7.498s] 2: [INFO] [1791425630.623042607] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[7.499s] 2: [INFO] [1791425630.623604342] [rplidar_node]: [Lifecycle] Configuring node...
+[7.499s] 2: [WARN] [1791425630.623675829] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[7.499s] 2: [INFO] [1791425630.623845054] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[7.499s] 2: [WARN] [1791425630.624016953] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[7.499s] 2: [WARN] [1791425630.624037342] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[7.499s] 2: [WARN] [1791425630.624045497] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[7.499s] 2: [INFO] [1791425630.624116954] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[7.499s] 2: [INFO] [1791425630.624136802] [rplidar_node]: [Lifecycle] Activating node...
+[7.500s] 2: [INFO] [1791425630.624189623] [rplidar_node]: [FSM] Scan loop started.
+[7.500s] 2: [INFO] [1791425630.624242485] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[7.520s] 2: [INFO] [1791425630.644358275] [rplidar_node]: [FSM] Starting motor...
+[7.520s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[7.520s] 2: [INFO] [1791425630.644372212] [rplidar_node]: [Config] Max Range: 40.00 m
+[7.520s] 2: [INFO] [1791425630.644381940] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[7.530s] 2: [INFO] [1791425630.654461897] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[9.507s] 2: [WARN] [1791425632.631128525] [rplidar_node]: [Standby] stop_motor: Refused: 'auto_standby' is enabled, the subscriber count controls the motor.
+[10.510s] 2: [INFO] [1791425633.634937454] [rplidar_node]: [Lifecycle] Deactivating node...
+[10.515s] 2: [INFO] [1791425633.640085304] [rplidar_node]: [FSM] Scan loop terminated.
+[10.517s] 2: [INFO] [1791425633.641329978] [rplidar_node]: [Lifecycle] Destroying node resources...
+[10.517s] 2: [INFO] [1791425633.641352982] [rplidar_node]: [Driver] Stopping motor during destruction...
+[10.518s] 2: [       OK ] RplidarNodeTest.AutoStandbyIgnoresStopMotorService (3022 ms)
+[10.518s] 2: [ RUN      ] RplidarNodeTest.StandbyServiceRefusedWhileInactive
+[10.520s] 2: [INFO] [1791425633.645030145] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[10.521s] 2: [INFO] [1791425633.645585930] [rplidar_node]: [Lifecycle] Configuring node...
+[10.521s] 2: [WARN] [1791425633.645654732] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[10.521s] 2: [INFO] [1791425633.645818435] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[10.521s] 2: [WARN] [1791425633.645979173] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[10.521s] 2: [WARN] [1791425633.645999442] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[10.521s] 2: [WARN] [1791425633.646007718] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[10.521s] 2: [INFO] [1791425633.646076500] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[10.521s] 2: [WARN] [1791425633.646261754] [rplidar_node]: [Standby] stop_motor: Refused: the node is not ACTIVE, so the scan loop cannot apply the request.
+[10.521s] 2: [INFO] [1791425633.646302252] [rplidar_node]: [Lifecycle] Cleaning up resources...
+[10.522s] 2: [INFO] [1791425633.647014947] [rplidar_node]: [Lifecycle] Destroying node resources...
+[10.523s] 2: [       OK ] RplidarNodeTest.StandbyServiceRefusedWhileInactive (5 ms)
+[10.523s] 2: [ RUN      ] RplidarNodeTest.AutoStandbyEnableClearsManualStandby
+[10.525s] 2: [INFO] [1791425633.649678469] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[10.525s] 2: [INFO] [1791425633.650202362] [rplidar_node]: [Lifecycle] Configuring node...
+[10.525s] 2: [WARN] [1791425633.650267848] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[10.526s] 2: [INFO] [1791425633.650410591] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[10.526s] 2: [WARN] [1791425633.650524219] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[10.526s] 2: [WARN] [1791425633.650542263] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[10.526s] 2: [WARN] [1791425633.650550509] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[10.526s] 2: [INFO] [1791425633.650609111] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[10.526s] 2: [INFO] [1791425633.650627116] [rplidar_node]: [Lifecycle] Activating node...
+[10.526s] 2: [INFO] [1791425633.650673926] [rplidar_node]: [FSM] Scan loop started.
+[10.526s] 2: [INFO] [1791425633.650697501] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[10.546s] 2: [INFO] [1791425633.670811457] [rplidar_node]: [FSM] Starting motor...
+[10.546s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[10.546s] 2: [INFO] [1791425633.670827979] [rplidar_node]: [Config] Max Range: 40.00 m
+[10.546s] 2: [INFO] [1791425633.670833910] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[10.556s] 2: [INFO] [1791425633.680899430] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[10.557s] 2: [INFO] [1791425633.681379509] [rplidar_node]: [Standby] stop_motor: Standby requested, the motor stops shortly.
+[10.566s] 2: [INFO] [1791425633.691216441] [rplidar_node]: [FSM] Entering STANDBY (stopping motor)...
+[12.566s] 2: [INFO] [1791425635.690528038] [rplidar_node]: [Dynamic] Auto standby: ON
+[12.569s] 2: [INFO] [1791425635.693980140] [rplidar_node]: [FSM] Leaving STANDBY (restarting motor)...
+[12.579s] 2: [INFO] [1791425635.704079273] [rplidar_node]: [FSM] Starting motor...
+[12.579s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[12.579s] 2: [INFO] [1791425635.704110052] [rplidar_node]: [Config] Max Range: 40.00 m
+[12.580s] 2: [INFO] [1791425635.704120613] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[12.589s] 2: [INFO] [1791425635.714210529] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[12.591s] 2: [INFO] [1791425635.716222533] [rplidar_node]: [Lifecycle] Deactivating node...
+[12.600s] 2: [INFO] [1791425635.724549953] [rplidar_node]: [FSM] Scan loop terminated.
+[12.601s] 2: [INFO] [1791425635.725581389] [rplidar_node]: [Lifecycle] Destroying node resources...
+[12.601s] 2: [INFO] [1791425635.725601578] [rplidar_node]: [Driver] Stopping motor during destruction...
+[12.602s] 2: [       OK ] RplidarNodeTest.AutoStandbyEnableClearsManualStandby (2079 ms)
+[12.602s] 2: [ RUN      ] RplidarNodeTest.AutoStandbyEnableKeepsMotorParkedWithoutSubscribers
+[12.604s] 2: [INFO] [1791425635.729062957] [rplidar_node]: [Lifecycle] Node created. Waiting for configuration.
+[12.605s] 2: [INFO] [1791425635.729658538] [rplidar_node]: [Lifecycle] Configuring node...
+[12.605s] 2: [WARN] [1791425635.729751085] [rplidar_node]: [Driver] DUMMY MODE ENABLED - using synthetic scan data.
+[12.605s] 2: [INFO] [1791425635.729946660] [rplidar_node]: [QoS] Policy: rmw_qos_profile_sensor_data
+[12.605s] 2: [WARN] [1791425635.730108540] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.history' dynamically is not supported at the moment.
+[12.605s] 2: [WARN] [1791425635.730132666] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.depth' dynamically is not supported at the moment.
+[12.605s] 2: [WARN] [1791425635.730145240] [rplidar_node]: [Dynamic] Changing param 'qos_overrides./tf_static.publisher.reliability' dynamically is not supported at the moment.
+[12.605s] 2: [INFO] [1791425635.730237557] [rplidar_node]: [TF] Broadcasting static transform: base_link -> laser_frame
+[12.605s] 2: [INFO] [1791425635.730261794] [rplidar_node]: [Lifecycle] Activating node...
+[12.606s] 2: [INFO] [1791425635.730318472] [rplidar_node]: [FSM] Scan loop started.
+[12.606s] 2: [INFO] [1791425635.730363118] [rplidar_node]: [Hardware Detail] [Dummy] Virtual Driver
+[12.626s] 2: [INFO] [1791425635.750479319] [rplidar_node]: [FSM] Starting motor...
+[12.626s] 2: [Dummy] Virtual RPLIDAR device ready (MockState-based).
+[12.626s] 2: [INFO] [1791425635.750503976] [rplidar_node]: [Config] Max Range: 40.00 m
+[12.626s] 2: [INFO] [1791425635.750514777] [rplidar_node]: [FSM] Motor started. Entering RUNNING state.
+[12.636s] 2: [INFO] [1791425635.760610845] [rplidar_node]: [FSM] Applying configured motor speed (0 rpm)...
+[12.662s] 2: [INFO] [1791425635.786410612] [rplidar_node]: [Standby] stop_motor: Standby requested, the motor stops shortly.
+[12.667s] 2: [INFO] [1791425635.791470974] [rplidar_node]: [FSM] Entering STANDBY (stopping motor)...
+[12.713s] 2: [INFO] [1791425635.837433802] [rplidar_node]: [Dynamic] Auto standby: ON
+[14.715s] 2: [INFO] [1791425637.840000732] [rplidar_node]: [Lifecycle] Deactivating node...
+[14.720s] 2: [INFO] [1791425637.845022851] [rplidar_node]: [FSM] Scan loop terminated.
+[14.721s] 2: [INFO] [1791425637.846221186] [rplidar_node]: [Lifecycle] Destroying node resources...
+[14.722s] 2: [INFO] [1791425637.846238560] [rplidar_node]: [Driver] Stopping motor during destruction...
+[14.723s] 2: [       OK ] RplidarNodeTest.AutoStandbyEnableKeepsMotorParkedWithoutSubscribers (2122 ms)
+[14.723s] 2: [----------] 8 tests from RplidarNodeTest (14532 ms total)
+[14.723s] 2: 
+[14.723s] 2: [----------] Global test environment tear-down
+[14.724s] 2: [==========] 8 tests from 1 test suite ran. (14541 ms total)
+[14.724s] 2: [  PASSED  ] 8 tests.
+[14.828s] 2: -- run_test.py: return code 0
+[14.828s] 2: -- run_test.py: inject classname prefix into gtest result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_node.gtest.xml'
+[14.828s] 2: -- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/test_rplidar_node.gtest.xml'
+[14.834s] 2/5 Test #2: test_rplidar_node ................   Passed   14.68 sec
+[14.834s] test 3
+[14.834s]     Start 3: cppcheck
+[14.834s] 
+[14.834s] 3: Test command: /usr/bin/python3 "-u" "/opt/ros/humble/share/ament_cmake_test/cmake/run_test.py" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml" "--package-name" "rplidar_driver" "--output-file" "/home/kevin/dev/lidarws/build/rplidar_driver/ament_cppcheck/cppcheck.txt" "--command" "/opt/ros/humble/bin/ament_cppcheck" "--xunit-file" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml" "--include_dirs" "/home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/include" "/home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/src" "/home/kevin/dev/lidarws/src/rplidar_driver/include" "/home/kevin/dev/lidarws/src/rplidar_driver/include"
+[14.834s] 3: Test timeout computed to be: 300
+[14.864s] 3: -- run_test.py: invoking following command in '/home/kevin/dev/lidarws/src/rplidar_driver':
+[14.864s] 3:  - /opt/ros/humble/bin/ament_cppcheck --xunit-file /home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml --include_dirs /home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/include /home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/src /home/kevin/dev/lidarws/src/rplidar_driver/include /home/kevin/dev/lidarws/src/rplidar_driver/include
+[14.909s] 3: cppcheck 2.7 has known performance issues and therefore will not be used, set the AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS environment variable to override this.
+[14.915s] 3: -- run_test.py: return code 0
+[14.915s] 3: -- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml'
+[14.921s] 3/5 Test #3: cppcheck .........................   Passed    0.09 sec
+[14.921s] test 4
+[14.921s]     Start 4: lint_cmake
+[14.921s] 
+[14.921s] 4: Test command: /usr/bin/python3 "-u" "/opt/ros/humble/share/ament_cmake_test/cmake/run_test.py" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml" "--package-name" "rplidar_driver" "--output-file" "/home/kevin/dev/lidarws/build/rplidar_driver/ament_lint_cmake/lint_cmake.txt" "--command" "/opt/ros/humble/bin/ament_lint_cmake" "--xunit-file" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml"
+[14.921s] 4: Test timeout computed to be: 60
+[14.950s] 4: -- run_test.py: invoking following command in '/home/kevin/dev/lidarws/src/rplidar_driver':
+[14.950s] 4:  - /opt/ros/humble/bin/ament_lint_cmake --xunit-file /home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml
+[14.983s] 4: 
+[14.983s] 4: No problems found
+[14.988s] 4: -- run_test.py: return code 0
+[14.988s] 4: -- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml'
+[14.994s] 4/5 Test #4: lint_cmake .......................   Passed    0.07 sec
+[14.994s] test 5
+[14.994s]     Start 5: xmllint
+[14.994s] 
+[14.994s] 5: Test command: /usr/bin/python3 "-u" "/opt/ros/humble/share/ament_cmake_test/cmake/run_test.py" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/xmllint.xunit.xml" "--package-name" "rplidar_driver" "--output-file" "/home/kevin/dev/lidarws/build/rplidar_driver/ament_xmllint/xmllint.txt" "--command" "/opt/ros/humble/bin/ament_xmllint" "--xunit-file" "/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/xmllint.xunit.xml"
+[14.994s] 5: Test timeout computed to be: 60
+[15.024s] 5: -- run_test.py: invoking following command in '/home/kevin/dev/lidarws/src/rplidar_driver':
+[15.025s] 5:  - /opt/ros/humble/bin/ament_xmllint --xunit-file /home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/xmllint.xunit.xml
+[15.377s] 5: File 'package.xml' is valid
+[15.377s] 5: 
+[15.377s] 5: No problems found
+[15.383s] 5: -- run_test.py: return code 0
+[15.383s] 5: -- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/xmllint.xunit.xml'
+[15.389s] 5/5 Test #5: xmllint ..........................   Passed    0.40 sec
+[15.389s] 
+[15.389s] 100% tests passed, 0 tests failed out of 5
+[15.389s] 
+[15.389s] Label Time Summary:
+[15.389s] cppcheck      =   0.09 sec*proc (1 test)
+[15.389s] gtest         =  14.72 sec*proc (2 tests)
+[15.389s] lint_cmake    =   0.07 sec*proc (1 test)
+[15.389s] linter        =   0.55 sec*proc (3 tests)
+[15.389s] xmllint       =   0.40 sec*proc (1 test)
+[15.389s] 
+[15.389s] Total Test time (real) =  15.28 sec
+[15.392s] Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} /usr/bin/ctest -C Release -D ExperimentalTest --no-compress-output -V --force-new-ctest-process

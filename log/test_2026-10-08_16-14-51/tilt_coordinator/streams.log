@@ -1,0 +1,13 @@
+[0.104s] Invoking command in '/home/kevin/dev/lidarws/src/tilt_coordinator': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache -k test_mesh_postprocessor PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest
+[0.335s] ============================= test session starts ==============================
+[0.335s] platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+[0.335s] cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+[0.335s] rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+[0.335s] plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+[0.335s] collected 25 items / 19 deselected / 6 selected
+[0.335s] 
+[0.544s] test/test_mesh_postprocessor.py ......                                   [100%]
+[0.544s] 
+[0.544s] - generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+[0.544s] ======================= 6 passed, 19 deselected in 0.33s =======================
+[0.584s] Invoked command in '/home/kevin/dev/lidarws/src/tilt_coordinator' returned '0': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:/home/kevin/dev/lidarws/install/rplidar_driver:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/kevin/dev/lidarws/install/rplidar_driver LD_LIBRARY_PATH=/home/kevin/dev/lidarws/install/rplidar_driver/lib:${LD_LIBRARY_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache -k test_mesh_postprocessor PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest

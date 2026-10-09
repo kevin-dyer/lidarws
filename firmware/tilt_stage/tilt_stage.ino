@@ -39,7 +39,8 @@ enum TiltMotionState {
 int stepMode = SIXTEENTH_STEP;
 float stepsPerDegree = 0.0;
 float maxTiltSpeedDegS = MAX_TILT_SPEED_DEG_S;
-float hallOffsetDeg = 37.0;
+// float hallOffsetDeg = 37.0;
+float hallOffsetDeg = 2.0;
 bool invertTilt = false;
 bool enabled = true;
 TiltMotionState tiltMotionState = TILT_IDLE;
@@ -194,12 +195,14 @@ void startTiltSweep(float startAngle, float stopAngle) {
   }
 
   sweepStopSteps = lround(angleToSteps(stopAngle));
+  stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
   tiltMotionState = TILT_MOVING_TO_SWEEP_START;
   stepper.moveTo(lround(angleToSteps(startAngle)));
 }
 
 void stopTiltSweepAndReturnHome() {
   tiltMotionState = TILT_RETURNING_HOME;
+  stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
   stepper.moveTo(0);
 }
 
@@ -213,6 +216,7 @@ void emitSweepSample() {
 void updateTiltMotion() {
   if (tiltMotionState == TILT_MOVING_TO_SWEEP_START &&
       stepper.distanceToGo() == 0) {
+    applyMotorSpeed();
     stepper.moveTo(sweepStopSteps);
     tiltMotionState = TILT_SWEEPING;
     lastSweepSampleMicros = micros();
@@ -224,6 +228,7 @@ void updateTiltMotion() {
     if (stepper.distanceToGo() == 0) {
       emitSweepSample();
       tiltMotionState = TILT_RETURNING_HOME;
+      stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
       stepper.moveTo(0);
       return;
     }
@@ -239,6 +244,7 @@ void updateTiltMotion() {
   if (tiltMotionState == TILT_RETURNING_HOME &&
       stepper.distanceToGo() == 0) {
     tiltMotionState = TILT_IDLE;
+    applyMotorSpeed();
     Serial.println(F("X"));
   }
 }

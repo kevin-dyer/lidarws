@@ -1,0 +1,82 @@
+[0.021s] Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/kevin/dev/lidarws/src/rplidar_driver -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/kevin/dev/lidarws/install/rplidar_driver
+[0.031s] -- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.138s] -- Override CMake install command with custom implementation using symlinks instead of copying resources
+[0.144s] -- Found rclcpp: 16.0.21 (/opt/ros/humble/share/rclcpp/cmake)
+[0.166s] -- Found rosidl_generator_c: 3.1.9 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.169s] -- Found rosidl_adapter: 3.1.9 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.173s] -- Found rosidl_generator_cpp: 3.1.9 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.178s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.185s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.201s] -- Found rmw_implementation_cmake: 6.1.4 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.202s] -- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+[0.287s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.327s] -- Found rclcpp_components: 16.0.21 (/opt/ros/humble/share/rclcpp_components/cmake)
+[0.340s] -- Found rclcpp_lifecycle: 16.0.21 (/opt/ros/humble/share/rclcpp_lifecycle/cmake)
+[0.348s] -- Found sensor_msgs: 4.9.2 (/opt/ros/humble/share/sensor_msgs/cmake)
+[0.363s] -- Found diagnostic_updater: 4.0.7 (/opt/ros/humble/share/diagnostic_updater/cmake)
+[0.373s] -- Found tf2: 0.25.23 (/opt/ros/humble/share/tf2/cmake)
+[0.375s] -- Found tf2_ros: 0.25.23 (/opt/ros/humble/share/tf2_ros/cmake)
+[0.420s] -- Found std_srvs: 4.9.2 (/opt/ros/humble/share/std_srvs/cmake)
+[0.426s] -- Setting executor non-default value SingleThreadedExecutor
+[0.428s] -- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)
+[0.487s] -- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)
+[0.488s] -- Ensuring Eigen3 include directory is part of orocos-kdl CMake target
+[0.490s] -- Found gtest sources under '/opt/ros/humble/src/gtest_vendor': C++ tests using 'Google Test' will be built
+[0.502s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[0.502s] -- Configured cppcheck include dirs: /home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/include;/home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/src;$<BUILD_INTERFACE:/home/kevin/dev/lidarws/src/rplidar_driver/include>;/home/kevin/dev/lidarws/src/rplidar_driver/include
+[0.502s] -- Configured cppcheck exclude dirs and/or files: 
+[0.502s] -- Added test 'lint_cmake' to check CMake code style
+[0.502s] -- Added test 'xmllint' to check XML markup files
+[0.505s] -- Configuring done
+[0.522s] -- Generating done
+[0.528s] -- Build files have been written to: /home/kevin/dev/lidarws/build/rplidar_driver
+[0.536s] Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/kevin/dev/lidarws/src/rplidar_driver -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/kevin/dev/lidarws/install/rplidar_driver
+[0.537s] Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/kevin/dev/lidarws/build/rplidar_driver -- -j24 -l24
+[0.580s] [35m[1mConsolidate compiler generated dependencies of target gtest[0m
+[0.580s] [35m[1mConsolidate compiler generated dependencies of target gtest_main[0m
+[0.580s] [35m[1mConsolidate compiler generated dependencies of target rplidar_node[0m
+[0.582s] [35m[1mConsolidate compiler generated dependencies of target rplidar_sdk[0m
+[0.592s] [ 13%] Built target gtest_main
+[0.592s] [ 13%] Built target gtest
+[0.596s] [ 16%] [32m[1mLinking CXX executable rplidar_node[0m
+[0.604s] [ 73%] Built target rplidar_sdk
+[0.616s] [35m[1mConsolidate compiler generated dependencies of target rplidar_node_component[0m
+[0.637s] [ 76%] [32m[1mLinking CXX shared library librplidar_node_component.so[0m
+[0.705s] [ 80%] Built target rplidar_node
+[1.009s] [ 86%] Built target rplidar_node_component
+[1.021s] [35m[1mConsolidate compiler generated dependencies of target test_rplidar_wrapper[0m
+[1.021s] [35m[1mConsolidate compiler generated dependencies of target test_rplidar_node[0m
+[1.035s] [ 90%] [32m[1mLinking CXX executable test_rplidar_wrapper[0m
+[1.038s] [ 93%] [32m[1mLinking CXX executable test_rplidar_node[0m
+[1.240s] [ 96%] Built target test_rplidar_wrapper
+[1.775s] [100%] Built target test_rplidar_node
+[1.788s] Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/kevin/dev/lidarws/build/rplidar_driver -- -j24 -l24
+[1.800s] Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/kevin/dev/lidarws/build/rplidar_driver
+[1.808s] -- Install configuration: ""
+[1.808s] -- Execute custom install script
+[1.808s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/lib/rplidar_driver/rplidar_node
+[1.820s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/lib/librplidar_node_component.so
+[1.830s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/launch/composition.launch.py
+[1.842s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/launch/debug_rviz.launch.py
+[1.852s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/launch/rplidar.launch.py
+[1.862s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/launch/rplidar_with_args.launch.py
+[1.873s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/param/rplidar.yaml
+[1.883s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/config/debug.rviz
+[1.888s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/config/rplidar.rviz
+[1.893s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/ament_index/resource_index/package_run_dependencies/rplidar_driver
+[1.897s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/ament_index/resource_index/parent_prefix_path/rplidar_driver
+[1.901s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/environment/ament_prefix_path.sh
+[1.905s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/environment/ament_prefix_path.dsv
+[1.909s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/environment/path.sh
+[1.916s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/environment/path.dsv
+[1.927s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/local_setup.bash
+[1.938s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/local_setup.sh
+[1.949s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/local_setup.zsh
+[1.959s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/local_setup.dsv
+[1.968s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/package.dsv
+[1.977s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/ament_index/resource_index/packages/rplidar_driver
+[1.987s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/ament_index/resource_index/rclcpp_components/rplidar_driver
+[1.995s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/cmake/rplidar_driverConfig.cmake
+[2.004s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/cmake/rplidar_driverConfig-version.cmake
+[2.012s] -- Symlinking: /home/kevin/dev/lidarws/install/rplidar_driver/share/rplidar_driver/package.xml
+[2.023s] Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/kevin/dev/lidarws/build/rplidar_driver

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite
+  name="rplidar_driver.xmllint"
+  tests="1"
+  errors="0"
+  failures="0"
+  time="0.318"
+>
+  <testcase
+    name="package.xml"
+    classname="rplidar_driver.xmllint"/>
+  <system-out>Checked files:
+* package.xml</system-out>
+</testsuite>

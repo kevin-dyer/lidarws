@@ -1,0 +1,28 @@
+[0.107s] Invoking command in '/home/kevin/dev/lidarws/src/tilt_coordinator': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:${AMENT_PREFIX_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest
+[0.260s] ============================= test session starts ==============================
+[0.260s] platform linux -- Python 3.10.12, pytest-6.2.5, py-1.10.0, pluggy-0.13.0
+[0.260s] cachedir: /home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache
+[0.260s] rootdir: /home/kevin/dev/lidarws/src/tilt_coordinator
+[0.260s] plugins: ament-xmllint-0.12.15, ament-flake8-0.12.15, ament-pep257-0.12.15, ament-lint-0.12.15, ament-copyright-0.12.15, launch-testing-1.0.15, launch-testing-ros-0.19.14, cov-3.0.0, colcon-core-0.21.3
+[0.260s] collected 11 items
+[0.260s] 
+[0.279s] test/test_coordinator.py ....F.....                                      [ 90%]
+[0.280s] test/test_tilt_serial.py .                                               [100%]
+[0.280s] 
+[0.280s] =================================== FAILURES ===================================
+[0.281s] ______________ test_validate_tilt_states_enforces_firmware_limits ______________
+[0.281s] test/test_coordinator.py:132: in test_validate_tilt_states_enforces_firmware_limits
+[0.281s]     validate_tilt_states([State('A', 0.0, 0.0, 90.0)])
+[0.281s] tilt_coordinator/coordinator.py:36: in validate_tilt_states
+[0.281s]     raise ValueError(
+[0.281s] E   ValueError: A sweep_stop=90.000 exceeds the tilt stage limit of +/-45.0 degrees
+[0.281s] 
+[0.281s] During handling of the above exception, another exception occurred:
+[0.281s] test/test_coordinator.py:131: in test_validate_tilt_states_enforces_firmware_limits
+[0.281s]     with pytest.raises(ValueError, match=r'position A sweep_stop=90.000.*\+/-45.0'):
+[0.281s] E   AssertionError: Regex pattern 'position A sweep_stop=90.000.*\\+/-45.0' does not match 'A sweep_stop=90.000 exceeds the tilt stage limit of +/-45.0 degrees'.
+[0.281s] - generated xml file: /home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml -
+[0.281s] =========================== short test summary info ============================
+[0.281s] FAILED test/test_coordinator.py::test_validate_tilt_states_enforces_firmware_limits
+[0.281s] ========================= 1 failed, 10 passed in 0.06s =========================
+[0.306s] Invoked command in '/home/kevin/dev/lidarws/src/tilt_coordinator' returned '1': AMENT_PREFIX_PATH=/home/kevin/dev/lidarws/install/tilt_coordinator:${AMENT_PREFIX_PATH} PYTEST_ADDOPTS=--tb=short --junit-xml=/home/kevin/dev/lidarws/build/tilt_coordinator/pytest.xml --junit-prefix=tilt_coordinator -o cache_dir=/home/kevin/dev/lidarws/build/tilt_coordinator/.pytest_cache PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/kevin/dev/lidarws/install/tilt_coordinator/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -m pytest
