@@ -1,1 +1,0 @@
-/home/kevin/dev/lidarws/src/rplidar_driver/launch/rplidar.launch.py

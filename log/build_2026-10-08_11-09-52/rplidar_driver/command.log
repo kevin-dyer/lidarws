@@ -1,6 +1,0 @@
-Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/kevin/dev/lidarws/src/rplidar_driver -DCMAKE_INSTALL_PREFIX=/home/kevin/dev/lidarws/install/rplidar_driver
-Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /home/kevin/dev/lidarws/src/rplidar_driver -DCMAKE_INSTALL_PREFIX=/home/kevin/dev/lidarws/install/rplidar_driver
-Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/kevin/dev/lidarws/build/rplidar_driver -- -j24 -l24
-Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --build /home/kevin/dev/lidarws/build/rplidar_driver -- -j24 -l24
-Invoking command in '/home/kevin/dev/lidarws/build/rplidar_driver': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/kevin/dev/lidarws/build/rplidar_driver
-Invoked command in '/home/kevin/dev/lidarws/build/rplidar_driver' returned '0': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake --install /home/kevin/dev/lidarws/build/rplidar_driver

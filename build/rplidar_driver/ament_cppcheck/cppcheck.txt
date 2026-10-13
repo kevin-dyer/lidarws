@@ -1,8 +1,0 @@
--- run_test.py: invoking following command in '/home/kevin/dev/lidarws/src/rplidar_driver':
- - /opt/ros/humble/bin/ament_cppcheck --xunit-file /home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml --include_dirs /home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/include /home/kevin/dev/lidarws/src/rplidar_driver/src/sdk/src /home/kevin/dev/lidarws/src/rplidar_driver/include /home/kevin/dev/lidarws/src/rplidar_driver/include
-
-cppcheck 2.7 has known performance issues and therefore will not be used, set the AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS environment variable to override this.
-
-
--- run_test.py: return code 0
--- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/cppcheck.xunit.xml'

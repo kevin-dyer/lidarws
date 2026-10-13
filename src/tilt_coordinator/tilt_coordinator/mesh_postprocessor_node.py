@@ -180,7 +180,7 @@ class MeshPostprocessorNode(Node):
 
         cloud = o3d.geometry.PointCloud()
         cloud.points = o3d.utility.Vector3dVector(points)
-        cloud_path = prefix + '_cloud.ply'
+        cloud_path = prefix + '_raw_cloud.ply'
         if not o3d.io.write_point_cloud(cloud_path, cloud):
             raise OSError('failed to save point cloud to %s' % cloud_path)
 

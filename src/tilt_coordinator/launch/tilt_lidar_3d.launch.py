@@ -3,8 +3,14 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessIO
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -24,15 +30,25 @@ def generate_launch_description():
         default_value=lidar_params_default,
         description='Path to the RPLIDAR driver parameters YAML file.',
     )
+    device_port_arg = DeclareLaunchArgument(
+        'device_port',
+        default_value='/dev/ttyACM0',
+        description='USB serial device connected to the Nano ESP32.',
+    )
     tilt_serial_port_arg = DeclareLaunchArgument(
         'tilt_serial_port',
-        default_value='/dev/ttyACM0',
-        description='Serial device connected to the Arduino tilt stage.',
+        default_value='/tmp/tilt_lidar_usb/tilt',
+        description='PTY path for tilt commands and telemetry from the USB mux.',
     )
     tilt_baud_arg = DeclareLaunchArgument(
         'tilt_baud',
         default_value='115200',
         description='Serial baud rate for the Arduino tilt stage.',
+    )
+    lidar_serial_port_arg = DeclareLaunchArgument(
+        'lidar_serial_port',
+        default_value='/tmp/tilt_lidar_usb/lidar',
+        description='PTY path for the RPLIDAR UART tunneled over USB.',
     )
     tilt_speed_arg = DeclareLaunchArgument(
         'tilt_speed_deg_s',
@@ -77,6 +93,9 @@ def generate_launch_description():
         ]),
         launch_arguments={
             'params_file': LaunchConfiguration('rplidar_params_file'),
+            'serial_port': LaunchConfiguration('lidar_serial_port'),
+            'serial_baudrate': '115200',
+            'serial_dtr_asserted': 'true',
         }.items(),
     )
 
@@ -146,10 +165,44 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('launch_rviz')),
     )
 
+    usb_bridge = ExecuteProcess(
+        cmd=[
+            'ros2', 'run', 'tilt_coordinator', 'usb_serial_bridge',
+            '--device-port', LaunchConfiguration('device_port'),
+            '--lidar-pty', LaunchConfiguration('lidar_serial_port'),
+            '--tilt-pty', LaunchConfiguration('tilt_serial_port'),
+        ],
+        name='usb_serial_bridge',
+        output='screen',
+    )
+
+    started_after_usb = {'value': False}
+
+    def launch_scan_stack_when_ready(event):
+        if started_after_usb['value'] or 'USB_READY' not in str(event.text):
+            return []
+        started_after_usb['value'] = True
+        return [
+            rplidar_launch,
+            tilt_stage_tf,
+            tilt_node,
+            mesh_postprocessor_node,
+            rviz_node,
+        ]
+
+    usb_ready_handler = RegisterEventHandler(
+        OnProcessIO(
+            target_action=usb_bridge,
+            on_stdout=launch_scan_stack_when_ready,
+        )
+    )
+
     return LaunchDescription([
         lidar_params_arg,
+        device_port_arg,
         tilt_serial_port_arg,
         tilt_baud_arg,
+        lidar_serial_port_arg,
         tilt_speed_arg,
         min_range_arg,
         max_range_arg,
@@ -157,9 +210,6 @@ def generate_launch_description():
         capture_on_start_arg,
         launch_rviz_arg,
         output_directory_arg,
-        rplidar_launch,
-        tilt_stage_tf,
-        tilt_node,
-        mesh_postprocessor_node,
-        rviz_node,
+        usb_ready_handler,
+        usb_bridge,
     ])

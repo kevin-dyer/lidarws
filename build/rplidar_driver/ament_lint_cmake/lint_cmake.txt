@@ -1,9 +1,0 @@
--- run_test.py: invoking following command in '/home/kevin/dev/lidarws/src/rplidar_driver':
- - /opt/ros/humble/bin/ament_lint_cmake --xunit-file /home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml
-
-
-No problems found
-
-
--- run_test.py: return code 0
--- run_test.py: verify result file '/home/kevin/dev/lidarws/build/rplidar_driver/test_results/rplidar_driver/lint_cmake.xunit.xml'

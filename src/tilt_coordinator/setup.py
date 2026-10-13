@@ -19,7 +19,7 @@ setup(
         ('share/' + package_name + '/doc',
             glob('doc/*.md')),
     ],
-    install_requires=['setuptools', 'numpy', 'pyserial'],
+    install_requires=['setuptools', 'numpy', 'pyserial', 'bleak'],
     zip_safe=True,
     maintainer='kevin',
     maintainer_email='kevin@todo.todo',
@@ -30,6 +30,8 @@ setup(
         'console_scripts': [
             'tilt_coordinator_node = tilt_coordinator.tilt_coordinator_node:main',
             'mesh_postprocessor_node = tilt_coordinator.mesh_postprocessor_node:main',
+            'ble_serial_bridge = tilt_coordinator.ble_serial_bridge:main',
+            'usb_serial_bridge = tilt_coordinator.usb_serial_bridge:main',
         ],
     },
 )

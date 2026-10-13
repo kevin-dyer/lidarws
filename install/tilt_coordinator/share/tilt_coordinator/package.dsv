@@ -1,6 +1,0 @@
-source;share/tilt_coordinator/hook/pythonpath.ps1
-source;share/tilt_coordinator/hook/pythonpath.dsv
-source;share/tilt_coordinator/hook/pythonpath.sh
-source;share/tilt_coordinator/hook/ament_prefix_path.ps1
-source;share/tilt_coordinator/hook/ament_prefix_path.dsv
-source;share/tilt_coordinator/hook/ament_prefix_path.sh

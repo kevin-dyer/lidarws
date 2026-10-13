@@ -1,6 +1,0 @@
-test_rplidar_wrapper 1 0.0434968
-test_rplidar_node 1 14.6796
-cppcheck 1 0.0869179
-lint_cmake 1 0.0725615
-xmllint 1 0.39501
----
