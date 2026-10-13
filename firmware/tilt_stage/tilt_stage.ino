@@ -4,6 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
+
+#if __has_include("wifi_config.h")
+#include "wifi_config.h"
+#else
+#define HOME_WIFI_SSID ""
+#define HOME_WIFI_PASSWORD ""
+#define FALLBACK_AP_SSID "TiltLidar-Bridge"
+#define FALLBACK_AP_PASSWORD "tilt-3d-scan"
+#endif
 
 const uint8_t STEP_PIN = 8;
 const uint8_t DIR_PIN = 7;
@@ -20,7 +31,9 @@ const uint8_t MUX_MAGIC_1 = 0x5A;
 const uint8_t MUX_CHANNEL_LIDAR = 1;
 const uint8_t MUX_CHANNEL_TILT = 2;
 const uint8_t MUX_CHANNEL_CONTROL = 0x7F;
-const size_t MUX_MAX_PAYLOAD = 180;
+const uint16_t UDP_PORT = 4210;
+const size_t MUX_MAX_PAYLOAD = 1190;
+const size_t MUX_MAX_DATAGRAM = MUX_MAX_PAYLOAD + 7;
 const size_t TILT_RX_BUFFER_SIZE = 512;
 
 const int HALF_STEP = 2;
@@ -44,14 +57,13 @@ size_t tiltRxTail = 0;
 size_t tiltRxCount = 0;
 bool tiltRxOverflow = false;
 uint8_t lidarTxBuffer[MUX_MAX_PAYLOAD];
-size_t lidarTxLength = 0;
 uint8_t previousLidarCommandByte = 0;
-uint8_t muxChannel = 0;
-uint16_t muxLength = 0;
-uint16_t muxReceivedCrc = 0;
-uint8_t muxPayload[MUX_MAX_PAYLOAD];
-size_t muxPayloadIndex = 0;
-uint8_t muxState = 0;
+WiFiUDP udp;
+IPAddress hostAddress;
+uint16_t hostPort = 0;
+bool hostKnown = false;
+bool networkReady = false;
+uint8_t udpRxBuffer[MUX_MAX_DATAGRAM];
 
 uint16_t crc16Update(uint16_t crc, uint8_t value) {
   crc ^= (uint16_t)value << 8;
@@ -73,20 +85,22 @@ uint16_t frameCrc(uint8_t channel, uint16_t length, const uint8_t *payload) {
 }
 
 void sendMuxFrame(uint8_t channel, const uint8_t *payload, uint16_t length) {
-  if (length > MUX_MAX_PAYLOAD) {
+  if (!hostKnown || length > MUX_MAX_PAYLOAD) {
     return;
   }
   const uint16_t crc = frameCrc(channel, length, payload);
-  Serial.write(MUX_MAGIC_0);
-  Serial.write(MUX_MAGIC_1);
-  Serial.write(channel);
-  Serial.write(length & 0xFF);
-  Serial.write(length >> 8);
+  udp.beginPacket(hostAddress, hostPort);
+  udp.write(MUX_MAGIC_0);
+  udp.write(MUX_MAGIC_1);
+  udp.write(channel);
+  udp.write(length & 0xFF);
+  udp.write(length >> 8);
   if (length > 0) {
-    Serial.write(payload, length);
+    udp.write(payload, length);
   }
-  Serial.write(crc & 0xFF);
-  Serial.write(crc >> 8);
+  udp.write(crc & 0xFF);
+  udp.write(crc >> 8);
+  udp.endPacket();
 }
 
 class MuxTiltStream : public Stream {
@@ -157,84 +171,73 @@ void forwardLidarCommand(uint8_t value) {
   previousLidarCommandByte = value;
 }
 
-void handleMuxFrame() {
-  if (frameCrc(muxChannel, muxLength, muxPayload) != muxReceivedCrc) {
+void processUdpFrame(const uint8_t *packet, size_t packetLength,
+                     const IPAddress &senderAddress, uint16_t senderPort) {
+  if (packetLength < 7 || packet[0] != MUX_MAGIC_0 ||
+      packet[1] != MUX_MAGIC_1) {
     return;
   }
-  if (muxChannel == MUX_CHANNEL_LIDAR) {
-    for (uint16_t i = 0; i < muxLength; ++i) {
-      forwardLidarCommand(muxPayload[i]);
-    }
+
+  const uint8_t channel = packet[2];
+  const uint16_t length = packet[3] | ((uint16_t)packet[4] << 8);
+  if (length > MUX_MAX_PAYLOAD || packetLength != (size_t)length + 7) {
     return;
   }
-  if (muxChannel == MUX_CHANNEL_TILT) {
-    enqueueTiltBytes(muxPayload, muxLength);
+  const uint8_t *payload = packet + 5;
+  const uint16_t receivedCrc =
+      packet[5 + length] | ((uint16_t)packet[6 + length] << 8);
+  if (frameCrc(channel, length, payload) != receivedCrc) {
     return;
   }
-  if (muxChannel == MUX_CHANNEL_CONTROL && muxLength == 4 &&
-      memcmp(muxPayload, "PING", 4) == 0) {
+
+  if (channel == MUX_CHANNEL_CONTROL && length == 4 &&
+      memcmp(payload, "PING", 4) == 0) {
+    const bool newHost = !hostKnown || senderAddress != hostAddress ||
+                         senderPort != hostPort;
+    hostAddress = senderAddress;
+    hostPort = senderPort;
+    hostKnown = true;
     sendMuxFrame(MUX_CHANNEL_CONTROL,
                  reinterpret_cast<const uint8_t *>("PONG"), 4);
-  }
-}
-
-void processMuxByte(uint8_t value) {
-  switch (muxState) {
-    case 0:
-      muxState = value == MUX_MAGIC_0 ? 1 : 0;
-      break;
-    case 1:
-      muxState = value == MUX_MAGIC_1 ? 2 : (value == MUX_MAGIC_0 ? 1 : 0);
-      break;
-    case 2:
-      muxChannel = value;
-      muxState = 3;
-      break;
-    case 3:
-      muxLength = value;
-      muxState = 4;
-      break;
-    case 4:
-      muxLength |= (uint16_t)value << 8;
-      if (muxLength > MUX_MAX_PAYLOAD) {
-        muxState = value == MUX_MAGIC_0 ? 1 : 0;
-      } else {
-        muxPayloadIndex = 0;
-        muxState = muxLength == 0 ? 6 : 5;
-      }
-      break;
-    case 5:
-      muxPayload[muxPayloadIndex++] = value;
-      if (muxPayloadIndex == muxLength) {
-        muxState = 6;
-      }
-      break;
-    case 6:
-      muxReceivedCrc = value;
-      muxState = 7;
-      break;
-    case 7:
-      muxReceivedCrc |= (uint16_t)value << 8;
-      handleMuxFrame();
-      muxState = 0;
-      break;
-    default:
-      muxState = 0;
-      break;
-  }
-}
-
-void processUsbMux() {
-  while (Serial.available() > 0) {
-    const int value = Serial.read();
-    if (value >= 0) {
-      processMuxByte((uint8_t)value);
+    if (newHost) {
+      TiltSerial.println(F("READY"));
     }
+    return;
+  }
+
+  if (!hostKnown || senderAddress != hostAddress || senderPort != hostPort) {
+    return;
+  }
+  if (channel == MUX_CHANNEL_LIDAR) {
+    for (uint16_t i = 0; i < length; ++i) {
+      forwardLidarCommand(payload[i]);
+    }
+  } else if (channel == MUX_CHANNEL_TILT) {
+    enqueueTiltBytes(payload, length);
+  }
+}
+
+void processUdpPackets() {
+  int packetLength = udp.parsePacket();
+  while (packetLength > 0) {
+    const IPAddress senderAddress = udp.remoteIP();
+    const uint16_t senderPort = udp.remotePort();
+    if (packetLength <= (int)sizeof(udpRxBuffer)) {
+      const int received = udp.read(udpRxBuffer, sizeof(udpRxBuffer));
+      if (received == packetLength) {
+        processUdpFrame(udpRxBuffer, received, senderAddress, senderPort);
+      }
+    } else {
+      while (udp.available()) {
+        udp.read();
+      }
+    }
+    packetLength = udp.parsePacket();
   }
 }
 
 void serviceLidarBridge() {
-  processUsbMux();
+  processUdpPackets();
   size_t count = 0;
   while (count < sizeof(lidarTxBuffer) && Serial1.available() > 0) {
     const int value = Serial1.read();
@@ -246,6 +249,29 @@ void serviceLidarBridge() {
   if (count > 0) {
     sendMuxFrame(MUX_CHANNEL_LIDAR, lidarTxBuffer, count);
   }
+}
+
+bool startNetwork() {
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.setSleep(false);
+  if (!WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD)) {
+    Serial.println("ERROR: could not start fallback Wi-Fi access point");
+    return false;
+  }
+  Serial.print("Fallback AP: ");
+  Serial.print(FALLBACK_AP_SSID);
+  Serial.print(" at ");
+  Serial.println(WiFi.softAPIP());
+  if (strlen(HOME_WIFI_SSID) > 0) {
+    WiFi.begin(HOME_WIFI_SSID, HOME_WIFI_PASSWORD);
+    Serial.print("Joining home Wi-Fi: ");
+    Serial.println(HOME_WIFI_SSID);
+  }
+  if (!udp.begin(UDP_PORT)) {
+    Serial.println("ERROR: could not bind UDP port");
+    return false;
+  }
+  return true;
 }
 
 void runToPositionWithBridge(long target) {
@@ -753,6 +779,7 @@ void setup() {
 
   Serial.begin(115200);
   Serial1.begin(115200, SERIAL_8N1, LIDAR_RX_PIN, LIDAR_TX_PIN);
+  networkReady = startNetwork();
 
   stepper.setAcceleration(5000.0);
   stepMode = SIXTEENTH_STEP;
@@ -761,16 +788,21 @@ void setup() {
   applyMotorSpeed();
 
   invertTiltDirection(false);
-  TiltSerial.println(F("READY"));
+  Serial.println(networkReady ? "UDP bridge ready" : "UDP bridge unavailable");
 }
 
 void loop() {
+  if (!networkReady) {
+    delay(100);
+    return;
+  }
+
   if (tiltRxOverflow) {
     tiltRxOverflow = false;
     TiltSerial.println(F("ERR TILT RX OVERFLOW"));
   }
 
-  processUsbMux();
+  processUdpPackets();
   serialParse();
   stepper.run();
   updateTiltMotion();

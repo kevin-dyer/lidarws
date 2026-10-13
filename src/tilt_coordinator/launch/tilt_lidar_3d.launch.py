@@ -30,15 +30,28 @@ def generate_launch_description():
         default_value=lidar_params_default,
         description='Path to the RPLIDAR driver parameters YAML file.',
     )
-    device_port_arg = DeclareLaunchArgument(
-        'device_port',
-        default_value='/dev/ttyACM0',
-        description='USB serial device connected to the Nano ESP32.',
+    board_ip_arg = DeclareLaunchArgument(
+        'board_ip',
+        default_value='255.255.255.255',
+        description=(
+            'Nano UDP discovery target. Use 192.168.4.1 when connected '
+            'directly to its fallback access point.'
+        ),
+    )
+    board_udp_port_arg = DeclareLaunchArgument(
+        'board_udp_port',
+        default_value='4210',
+        description='UDP port used by the Nano ESP32 firmware.',
+    )
+    host_udp_port_arg = DeclareLaunchArgument(
+        'host_udp_port',
+        default_value='4211',
+        description='Local UDP port for Nano ESP32 responses.',
     )
     tilt_serial_port_arg = DeclareLaunchArgument(
         'tilt_serial_port',
-        default_value='/tmp/tilt_lidar_usb/tilt',
-        description='PTY path for tilt commands and telemetry from the USB mux.',
+        default_value='/tmp/tilt_lidar_udp/tilt',
+        description='PTY path for tilt commands and telemetry from the UDP bridge.',
     )
     tilt_baud_arg = DeclareLaunchArgument(
         'tilt_baud',
@@ -47,8 +60,8 @@ def generate_launch_description():
     )
     lidar_serial_port_arg = DeclareLaunchArgument(
         'lidar_serial_port',
-        default_value='/tmp/tilt_lidar_usb/lidar',
-        description='PTY path for the RPLIDAR UART tunneled over USB.',
+        default_value='/tmp/tilt_lidar_udp/lidar',
+        description='PTY path for the RPLIDAR UART tunneled over UDP.',
     )
     tilt_speed_arg = DeclareLaunchArgument(
         'tilt_speed_deg_s',
@@ -165,23 +178,25 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('launch_rviz')),
     )
 
-    usb_bridge = ExecuteProcess(
+    udp_bridge = ExecuteProcess(
         cmd=[
-            'ros2', 'run', 'tilt_coordinator', 'usb_serial_bridge',
-            '--device-port', LaunchConfiguration('device_port'),
+            'ros2', 'run', 'tilt_coordinator', 'udp_serial_bridge',
+            '--board-ip', LaunchConfiguration('board_ip'),
+            '--board-port', LaunchConfiguration('board_udp_port'),
+            '--local-port', LaunchConfiguration('host_udp_port'),
             '--lidar-pty', LaunchConfiguration('lidar_serial_port'),
             '--tilt-pty', LaunchConfiguration('tilt_serial_port'),
         ],
-        name='usb_serial_bridge',
+        name='udp_serial_bridge',
         output='screen',
     )
 
-    started_after_usb = {'value': False}
+    started_after_udp = {'value': False}
 
     def launch_scan_stack_when_ready(event):
-        if started_after_usb['value'] or 'USB_READY' not in str(event.text):
+        if started_after_udp['value'] or 'UDP_READY' not in str(event.text):
             return []
-        started_after_usb['value'] = True
+        started_after_udp['value'] = True
         return [
             rplidar_launch,
             tilt_stage_tf,
@@ -190,16 +205,18 @@ def generate_launch_description():
             rviz_node,
         ]
 
-    usb_ready_handler = RegisterEventHandler(
+    udp_ready_handler = RegisterEventHandler(
         OnProcessIO(
-            target_action=usb_bridge,
+            target_action=udp_bridge,
             on_stdout=launch_scan_stack_when_ready,
         )
     )
 
     return LaunchDescription([
         lidar_params_arg,
-        device_port_arg,
+        board_ip_arg,
+        board_udp_port_arg,
+        host_udp_port_arg,
         tilt_serial_port_arg,
         tilt_baud_arg,
         lidar_serial_port_arg,
@@ -210,6 +227,6 @@ def generate_launch_description():
         capture_on_start_arg,
         launch_rviz_arg,
         output_directory_arg,
-        usb_ready_handler,
-        usb_bridge,
+        udp_ready_handler,
+        udp_bridge,
     ])

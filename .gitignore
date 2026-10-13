@@ -5,6 +5,9 @@
 /install/
 /log/
 
+# Local Wi-Fi credentials for the Nano ESP32 firmware
+/firmware/tilt_stage/wifi_config.h
+
 # Log files
 *.log
 

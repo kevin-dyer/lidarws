@@ -31,7 +31,7 @@ setup(
             'tilt_coordinator_node = tilt_coordinator.tilt_coordinator_node:main',
             'mesh_postprocessor_node = tilt_coordinator.mesh_postprocessor_node:main',
             'ble_serial_bridge = tilt_coordinator.ble_serial_bridge:main',
-            'usb_serial_bridge = tilt_coordinator.usb_serial_bridge:main',
+            'udp_serial_bridge = tilt_coordinator.udp_serial_bridge:main',
         ],
     },
 )
