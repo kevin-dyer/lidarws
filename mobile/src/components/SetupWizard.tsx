@@ -271,8 +271,8 @@ export function SetupWizard({ scanner, onClose, onConnected }: Props) {
           <ArrowLeft color={PALETTE.ink} size={22} />
         </Pressable>
         <View>
-          <Text style={styles.eyebrow}>STEP {Math.min(phaseIndex + 1, 4)} OF 4</Text>
           <Text style={styles.title}>{TITLES[phase]}</Text>
+          <Text style={styles.eyebrow}>STEP {Math.min(phaseIndex + 1, 4)} OF 4</Text>
         </View>
       </View>
       <View style={styles.progressRow}>
@@ -462,8 +462,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: PALETTE.line,
   },
-  eyebrow: { color: PALETTE.moss, fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
-  title: { color: PALETTE.ink, fontSize: 24, fontWeight: '700' },
+  eyebrow: { color: PALETTE.muted, fontSize: 9, fontWeight: '600', letterSpacing: 1.1, marginTop: 2 },
+  title: { color: PALETTE.ink, fontSize: 12, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
   progressRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingTop: 14 },
   progressBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: PALETTE.line },
   progressBarActive: { backgroundColor: PALETTE.forest },

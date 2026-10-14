@@ -530,6 +530,9 @@ bool parseSweepAngles(char *payload, float &startAngle, float &stopAngle) {
   return *startEnd == '\0' && *stopEnd == '\0';
 }
 
+bool tiltHomed = false;
+bool findHome();
+
 void startTiltSweep(float startAngle, float stopAngle) {
   if (tiltMotionState != TILT_IDLE) {
     TiltSerial.println(F("ERR BUSY"));
@@ -538,6 +541,17 @@ void startTiltSweep(float startAngle, float stopAngle) {
   if (!isfinite(startAngle) || !isfinite(stopAngle) || fabs(startAngle) > MAX_ANGLE_DEG || fabs(stopAngle) > MAX_ANGLE_DEG || startAngle == stopAngle) {
     TiltSerial.println(F("ERR SWEEP LIMIT"));
     return;
+  }
+
+  // Position 0 is only meaningful after homing, so home once if this boot has not yet.
+  if (!tiltHomed) {
+    if (!findHome()) {
+      stepper.setCurrentPosition(0);
+      stepper.moveTo(0);
+      TiltSerial.println(F("Error homing"));
+      return;
+    }
+    tiltHomed = true;
   }
 
   sweepStopSteps = lround(angleToSteps(stopAngle));
@@ -819,6 +833,7 @@ void serialParse() {
       break;
     case 'A':
       if (findHome()) {
+        tiltHomed = true;
         TiltSerial.println(F("Homing complete"));
         queryTiltAngle();
       } else {

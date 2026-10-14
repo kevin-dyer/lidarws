@@ -18,7 +18,7 @@ export function decimate(points: readonly Point3[], max: number): Point3[] {
 }
 
 /**
- * Orbit-camera orthographic projection. Scanner frame: x forward, y left, z up.
+ * Orbit-camera orthographic projection. Scanner frame: x forward, y left, z up (displayed with Z inverted).
  * Output coordinates are normalised to roughly [-1, 1] and bucketed by height.
  */
 export function projectPoints(
@@ -35,11 +35,12 @@ export function projectPoints(
   let minZ = Infinity;
   let maxZ = -Infinity;
   for (const p of points) {
-    if (p[2] < minZ) minZ = p[2];
-    if (p[2] > maxZ) maxZ = p[2];
+    if (-p[2] < minZ) minZ = -p[2];
+    if (-p[2] > maxZ) maxZ = -p[2];
   }
   const zRange = Math.max(maxZ - minZ, 0.001);
-  return points.map(([x, y, z]) => {
+  return points.map(([x, y, rawZ]) => {
+    const z = -rawZ;
     const rx = x * cy - y * sy;
     const ry = x * sy + y * cy;
     const screenX = ry;

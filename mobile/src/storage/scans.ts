@@ -15,6 +15,7 @@ export interface SavedScan {
   durationSeconds: number;
   startAngle: number;
   stopAngle: number;
+  groupId?: string;
 }
 
 async function readScans(): Promise<SavedScan[]> {
@@ -36,6 +37,7 @@ export async function saveScan(
   points: Point3[],
   settings: { durationSeconds: number; startAngle: number; stopAngle: number },
   photoSourceUri?: string,
+  options: { name?: string; attachTo?: SavedScan } = {},
 ): Promise<SavedScan> {
   const directory = FileSystem.documentDirectory;
   if (!directory) {
@@ -53,7 +55,7 @@ export async function saveScan(
 
   const scan: SavedScan = {
     id,
-    name: new Date().toLocaleString(),
+    name: options.name?.trim() || new Date().toLocaleString(),
     fileUri,
     photoUri,
     createdAt: new Date().toISOString(),
@@ -63,7 +65,14 @@ export async function saveScan(
     stopAngle: settings.stopAngle,
   };
   try {
-    await writeScans([scan, ...(await readScans())]);
+    const existing = await readScans();
+    if (options.attachTo) {
+      const anchor = existing.find((saved) => saved.id === options.attachTo?.id);
+      const groupId = anchor?.groupId ?? `group_${options.attachTo.id}`;
+      if (anchor) anchor.groupId = groupId;
+      scan.groupId = groupId;
+    }
+    await writeScans([scan, ...existing]);
   } catch (error) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true });
     if (photoUri) {
@@ -72,6 +81,12 @@ export async function saveScan(
     throw error;
   }
   return scan;
+}
+
+export async function renameScan(id: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  await writeScans((await readScans()).map((saved) => (saved.id === id ? { ...saved, name: trimmed } : saved)));
 }
 
 export async function deleteScan(scan: SavedScan): Promise<void> {

@@ -10,8 +10,8 @@ describe('projection', () => {
   it('projects forward points to screen centre at zero yaw/pitch', () => {
     const out = projectPoints([[2, 0, 0], [2, 0, 1]], 0, 0, 2);
     expect(out[0].x).toBeCloseTo(0);
-    expect(out[1].y).toBeCloseTo(0.5);
-    expect(out[1].band).toBeGreaterThan(out[0].band);
+    expect(out[1].y).toBeCloseTo(-0.5);
+    expect(out[1].band).toBeLessThan(out[0].band);
   });
 });
 

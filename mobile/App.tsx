@@ -16,21 +16,22 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import Slider from '@react-native-community/slider';
+import { DurationSlider } from './src/components/DurationSlider';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import Svg, { Circle } from 'react-native-svg';
+import { LidarIcon } from './src/components/LidarIcon';
 import {
   ArrowLeft,
   Camera,
   Check,
+  Layers,
   ChevronRight,
   Clock3,
   Compass,
   FolderOpen,
   Menu,
   Radio,
-  ScanLine,
   Share2,
   Trash2,
   Wifi,
@@ -44,15 +45,16 @@ import { AngleSelector } from './src/components/AngleSelector';
 import { ScanCancelledError, ScannerClient, type ScanProgress, type ScanSettings } from './src/scanner/ScannerClient';
 import type { Point3 } from './src/scanner/pointCloud';
 import { ScanCarousel } from './src/components/ScanCarousel';
-import { deleteScan, listScans, loadScanPoints, saveScan, type SavedScan } from './src/storage/scans';
+import { NameField } from './src/components/NameField';
+import { deleteScan, listScans, loadScanPoints, renameScan, saveScan, type SavedScan } from './src/storage/scans';
 
-type Screen = 'home' | 'setup' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'detail';
+type Screen = 'home' | 'setup' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'group' | 'detail';
 
 
 const INITIAL_SCAN: ScanSettings = {
   startAngle: -45,
   stopAngle: 45,
-  durationSeconds: 30,
+  durationSeconds: 15,
 };
 
 function AppButton({
@@ -89,6 +91,53 @@ function AppButton({
 
 const ZOOM = 1.6;
 
+interface GalleryEntry {
+  key: string;
+  groupId?: string;
+  title: string;
+  scans: SavedScan[];
+}
+
+function groupTitle(group: SavedScan[]): string {
+  const oldest = group[group.length - 1];
+  return oldest ? `${oldest.name}` : 'Scan group';
+}
+
+function buildEntries(scans: SavedScan[]): GalleryEntry[] {
+  const entries: GalleryEntry[] = [];
+  const byGroup = new Map<string, GalleryEntry>();
+  for (const scan of scans) {
+    if (scan.groupId) {
+      const existing = byGroup.get(scan.groupId);
+      if (existing) {
+        existing.scans.push(scan);
+        continue;
+      }
+      const entry: GalleryEntry = { key: scan.groupId, groupId: scan.groupId, title: '', scans: [scan] };
+      byGroup.set(scan.groupId, entry);
+      entries.push(entry);
+    } else {
+      entries.push({ key: scan.id, title: scan.name, scans: [scan] });
+    }
+  }
+  for (const entry of entries) if (entry.groupId) entry.title = `${groupTitle(entry.scans)} · group`;
+  return entries;
+}
+
+function ScanThumb({ scan, group }: { scan: SavedScan; group: boolean }) {
+  return (
+    <View style={styles.thumb}>
+      {scan.photoUri ? (
+        <Image source={{ uri: scan.photoUri }} style={styles.thumbImage} />
+      ) : group ? (
+        <Layers color={PALETTE.forest} size={22} />
+      ) : (
+        <LidarIcon color={PALETTE.forest} size={20} />
+      )}
+    </View>
+  );
+}
+
 function PageHeader({
   title,
   eyebrow,
@@ -106,8 +155,8 @@ function PageHeader({
         <ArrowLeft size={21} color={PALETTE.ink} />
       </Pressable>
       <View style={styles.pageHeading}>
+        <Text style={styles.pageTitle} numberOfLines={1}>{title}</Text>
         {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.pageTitle}>{title}</Text>
       </View>
       {action ?? <View style={styles.headerActionPlaceholder} />}
     </View>
@@ -115,7 +164,9 @@ function PageHeader({
 }
 
 function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -149,6 +200,10 @@ export default function App() {
   const [selectedPoints, setSelectedPoints] = useState<Point3[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [scanName, setScanName] = useState('');
+  const [addToScan, setAddToScan] = useState<SavedScan | null>(null);
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [detailBack, setDetailBack] = useState<Screen>('gallery');
   const { width: screenWidth } = useWindowDimensions();
   const [draggingAngle, setDraggingAngle] = useState(false);
   const [lidarOk, setLidarOk] = useState(true);
@@ -232,7 +287,18 @@ export default function App() {
       .finally(() => setLoadingScans(false));
   }, [screen]);
 
-  const openScan = (scan: SavedScan): void => {
+  const entries = useMemo(() => buildEntries(scans), [scans]);
+  const groupScans = useMemo(
+    () => (openGroupId ? scans.filter((scan) => scan.groupId === openGroupId) : []),
+    [scans, openGroupId],
+  );
+
+  useEffect(() => {
+    if (screen === 'group' && groupScans.length === 0) setScreen('gallery');
+  }, [screen, groupScans.length]);
+
+  const openScan = (scan: SavedScan, from: Screen = screen): void => {
+    setDetailBack(from === 'detail' ? 'gallery' : from);
     setSelectedScan(scan);
     setSelectedPoints([]);
     setScreen('detail');
@@ -246,24 +312,30 @@ export default function App() {
   };
 
   const shareSelected = async (): Promise<void> => {
-    for (const scan of scans.filter((item) => selectedIds.includes(item.id))) {
+    await shareMany(selectedScansFlat());
+  };
+
+  const selectedScansFlat = (): SavedScan[] =>
+    entries.filter((entry) => selectedIds.includes(entry.key)).flatMap((entry) => entry.scans);
+
+  const shareMany = async (targets: SavedScan[]): Promise<void> => {
+    for (const scan of targets) {
       await shareSavedScan(scan);
     }
   };
 
-  const deleteSelected = (): void => {
-    const targets = scans.filter((item) => selectedIds.includes(item.id));
-    Alert.alert(`Delete ${targets.length} scan${targets.length === 1 ? '' : 's'}?`, 'They will be removed from this device.', [
+  const confirmDeleteMany = (targets: SavedScan[], title: string, onDone?: () => void): void => {
+    Alert.alert(title, 'They will be removed from this device.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
+          const ids = targets.map((scan) => scan.id);
           void Promise.all(targets.map((scan) => deleteScan(scan)))
             .then(() => {
-              setScans((current) => current.filter((scan) => !selectedIds.includes(scan.id)));
-              setSelectedIds([]);
-              setSelecting(false);
+              setScans((current) => current.filter((scan) => !ids.includes(scan.id)));
+              onDone?.();
             })
             .catch((reason: unknown) =>
               setError(reason instanceof Error ? reason.message : 'Could not delete the selected scans.'),
@@ -271,6 +343,25 @@ export default function App() {
         },
       },
     ]);
+  };
+
+  const commitRename = (scan: SavedScan, name: string): void => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === scan.name) return;
+    void renameScan(scan.id, trimmed)
+      .then(() => {
+        setScans((current) => current.map((saved) => (saved.id === scan.id ? { ...saved, name: trimmed } : saved)));
+        setSelectedScan((current) => (current && current.id === scan.id ? { ...current, name: trimmed } : current));
+      })
+      .catch(() => setError('Could not rename this scan.'));
+  };
+
+  const deleteSelected = (): void => {
+    const targets = selectedScansFlat();
+    confirmDeleteMany(targets, `Delete ${targets.length} scan${targets.length === 1 ? '' : 's'}?`, () => {
+      setSelectedIds([]);
+      setSelecting(false);
+    });
   };
 
   const refreshDevice = async (): Promise<void> => {
@@ -307,9 +398,11 @@ export default function App() {
     setSaving(true);
     setError(null);
     try {
-      await saveScan(scanPoints, scanSettings, scanPhoto);
+      await saveScan(scanPoints, scanSettings, scanPhoto, { name: scanName, attachTo: addToScan ?? undefined });
       setScanPoints([]);
       setScanPhoto(undefined);
+      setScanName('');
+      setAddToScan(null);
       setScreen('home');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save the point cloud.');
@@ -327,6 +420,8 @@ export default function App() {
         onPress: () => {
           setScanPoints([]);
           setScanPhoto(undefined);
+          setScanName('');
+          setAddToScan(null);
           setScreen('home');
         },
       },
@@ -394,7 +489,7 @@ export default function App() {
           <ScrollView contentContainerStyle={styles.homePage} showsVerticalScrollIndicator={false}>
             <View style={styles.homeTopRow}>
               <View style={styles.brand}>
-                <View style={styles.brandMark}><ScanLine color={PALETTE.lime} size={19} /></View>
+                <View style={styles.brandMark}><LidarIcon color={PALETTE.lime} size={22} /></View>
                 <View>
                   <Text style={styles.brandName}>3D LIDAR SCANNER</Text>
                   <Text style={styles.brandCaption}>FIELD SCANNER</Text>
@@ -411,7 +506,16 @@ export default function App() {
             </View>
 
             {scans.length > 0 ? (
-              <ScanCarousel scans={scans} onOpen={openScan} />
+              <ScanCarousel
+                scans={scans}
+                onOpen={(scan) => openScan(scan, 'home')}
+                onAdd={(scan) => {
+                  setError(null);
+                  setScanSettings(INITIAL_SCAN);
+                  setAddToScan(scan);
+                  setScreen('scan');
+                }}
+              />
             ) : (
               <View style={styles.heroCopy}>
                 <Text style={styles.heroKicker}>YOUR WORLD, IN 3D</Text>
@@ -448,6 +552,7 @@ export default function App() {
                 onPress={() => {
                   setError(null);
                   setScanSettings(INITIAL_SCAN);
+                  setAddToScan(null);
                   setScreen('scan');
                 }}
                 disabled={!deviceAddress}
@@ -489,13 +594,22 @@ export default function App() {
 
         {screen === 'scan' && (
           <View style={styles.flex}>
-            <PageHeader title="New 3D scan" eyebrow="CAPTURE" onBack={() => setScreen('home')} />
+            <PageHeader
+              title={addToScan ? 'Add another scan' : 'New 3D scan'}
+              eyebrow="CAPTURE"
+              onBack={() => {
+                setAddToScan(null);
+                setScreen('home');
+              }}
+            />
             <ScrollView
               contentContainerStyle={styles.scanPageContent}
               showsVerticalScrollIndicator={false}
               scrollEnabled={!draggingAngle}
             >
-              <Text style={styles.introText}>Choose the tilt range and capture time for this scene.</Text>
+              <Text style={styles.introText}>
+                {addToScan ? `Another vantage point for “${addToScan.name}”. It will be saved in the same group.` : 'Choose the tilt range and capture time for this scene.'}
+              </Text>
               <View style={styles.scanCard}>
                 <View style={styles.cardTitleRow}>
                   <Text style={styles.sectionTitle}>Tilt range</Text>
@@ -531,19 +645,14 @@ export default function App() {
                     <Text style={styles.durationUnit}>SEC</Text>
                   </View>
                 </View>
-                <Slider
-                  accessibilityLabel="Scan duration"
-                  minimumValue={5}
-                  maximumValue={120}
-                  step={1}
+                <DurationSlider
+                  min={5}
+                  max={120}
                   value={scanSettings.durationSeconds}
-                  minimumTrackTintColor={PALETTE.forest}
-                  maximumTrackTintColor="#DFE7E2"
-                  thumbTintColor={PALETTE.forest}
-                  onValueChange={(durationSeconds) =>
-                    setScanSettings((current) => ({ ...current, durationSeconds }))
-                  }
-                  style={styles.slider}
+                  displayValue={effectiveDuration}
+                  color={PALETTE.forest}
+                  onDragChange={setDraggingAngle}
+                  onChange={(durationSeconds) => setScanSettings((current) => ({ ...current, durationSeconds }))}
                 />
                 <View style={styles.sliderLabels}>
                   <Text style={styles.sliderLabel}>5 SEC</Text>
@@ -579,7 +688,7 @@ export default function App() {
             <View style={styles.bottomBar}>
               <AppButton
                 title="Scan"
-                icon={<ScanLine color={PALETTE.lime} size={19} />}
+                icon={<LidarIcon color={PALETTE.lime} size={22} />}
                 onPress={() => {
                   setError(null);
                   setScanPhoto(undefined);
@@ -657,6 +766,8 @@ export default function App() {
               <Text style={styles.cloudCaption}>
                 {scanPoints.length.toLocaleString()} points captured · {effectiveDuration} second sweep
               </Text>
+              {addToScan && <Text style={styles.cloudCaption}>Will be grouped with “{addToScan.name}”</Text>}
+              <NameField value={scanName} onChangeText={setScanName} />
               <Pressable accessibilityRole="button" onPress={() => void takeScanPhoto()} style={styles.photoCard}>
                 {scanPhoto ? (
                   <Image
@@ -747,60 +858,64 @@ export default function App() {
             ) : (
               <FlatList
                 contentContainerStyle={styles.galleryList}
-                data={scans}
-                keyExtractor={(item) => item.id}
+                data={entries}
+                keyExtractor={(item) => item.key}
                 extraData={[selecting, selectedIds]}
-                renderItem={({ item }) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => (selecting ? toggleSelected(item.id) : openScan(item))}
-                    onLongPress={() => {
-                      setSelecting(true);
-                      toggleSelected(item.id);
-                    }}
-                    style={styles.savedScanCard}
-                  >
-                    {selecting && (
-                      <View style={[styles.selectBox, selectedIds.includes(item.id) && styles.selectBoxOn]}>
-                        {selectedIds.includes(item.id) && <Check size={14} color={PALETTE.white} />}
-                      </View>
-                    )}
-                    <View style={styles.thumb}>
-                      {item.photoUri ? (
-                        <Image source={{ uri: item.photoUri }} style={styles.thumbImage} />
-                      ) : (
-                        <ScanLine color={PALETTE.forest} size={20} />
+                renderItem={({ item }) => {
+                  const picked = selectedIds.includes(item.key);
+                  const lead = item.scans[0];
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        if (selecting) toggleSelected(item.key);
+                        else if (item.groupId) {
+                          setOpenGroupId(item.groupId);
+                          setScreen('group');
+                        } else openScan(lead, 'gallery');
+                      }}
+                      onLongPress={() => {
+                        setSelecting(true);
+                        toggleSelected(item.key);
+                      }}
+                      style={styles.savedScanCard}
+                    >
+                      {selecting && (
+                        <View style={[styles.selectBox, picked && styles.selectBoxOn]}>
+                          {picked && <Check size={14} color={PALETTE.white} />}
+                        </View>
                       )}
-                    </View>
-                    <View style={styles.savedScanInfo}>
-                      <Text style={styles.savedScanName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.savedScanDetails}>
-                        {item.pointCount.toLocaleString()} points · {formatDate(item.createdAt)}
-                      </Text>
-                      <Text style={styles.savedScanFile} numberOfLines={1}>{item.id}_raw_cloud.ply</Text>
-                    </View>
-                    {!selecting && (
-                      <View style={styles.savedScanActions}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Share point cloud"
-                          onPress={() => void shareSavedScan(item)}
-                          style={styles.smallAction}
-                        >
-                          <Share2 color={PALETTE.forest} size={18} />
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Delete point cloud"
-                          onPress={() => confirmDeleteSavedScan(item)}
-                          style={styles.smallAction}
-                        >
-                          <Trash2 color={PALETTE.danger} size={18} />
-                        </Pressable>
+                      <ScanThumb scan={item.scans.find((scan) => scan.photoUri) ?? lead} group={!!item.groupId} />
+                      <View style={styles.savedScanInfo}>
+                        <Text style={styles.savedScanName} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.savedScanDetails}>
+                          {item.groupId ? `${item.scans.length} scans · ` : ''}
+                          {item.scans.reduce((sum, scan) => sum + scan.pointCount, 0).toLocaleString()} points · {formatDate(lead.createdAt)}
+                        </Text>
                       </View>
-                    )}
-                  </Pressable>
-                )}
+                      {!selecting && (
+                        <View style={styles.savedScanActions}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Share"
+                            onPress={() => void shareMany(item.scans)}
+                            style={styles.smallAction}
+                          >
+                            <Share2 color={PALETTE.forest} size={18} />
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Delete"
+                            onPress={() => confirmDeleteMany(item.scans, item.groupId ? `Delete this group of ${item.scans.length} scans?` : 'Delete saved scan?')}
+                            style={styles.smallAction}
+                          >
+                            <Trash2 color={PALETTE.danger} size={18} />
+                          </Pressable>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                }}
               />
             )}
             <View style={styles.galleryFootnote}>
@@ -808,11 +923,60 @@ export default function App() {
             </View>
           </View>
         )}
+        {screen === 'group' && (
+          <View style={styles.flex}>
+            <PageHeader
+              title={groupTitle(groupScans)}
+              eyebrow={`GROUP · ${groupScans.length} SCANS`}
+              onBack={() => setScreen('gallery')}
+              action={
+                <View style={styles.headerIcons}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Share group" onPress={() => void shareMany(groupScans)} style={styles.smallAction}>
+                    <Share2 color={PALETTE.forest} size={19} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete group"
+                    onPress={() => confirmDeleteMany(groupScans, `Delete this group of ${groupScans.length} scans?`, () => setScreen('gallery'))}
+                    style={styles.smallAction}
+                  >
+                    <Trash2 color={PALETTE.danger} size={19} />
+                  </Pressable>
+                </View>
+              }
+            />
+            <FlatList
+              contentContainerStyle={styles.galleryList}
+              data={groupScans}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable accessibilityRole="button" onPress={() => openScan(item, 'group')} style={styles.savedScanCard}>
+                  <ScanThumb scan={item} group={false} />
+                  <View style={styles.savedScanInfo}>
+                    <Text style={styles.savedScanName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.savedScanDetails}>
+                      {item.pointCount.toLocaleString()} points · {formatDate(item.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.savedScanActions}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Share point cloud" onPress={() => void shareSavedScan(item)} style={styles.smallAction}>
+                      <Share2 color={PALETTE.forest} size={18} />
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Delete point cloud" onPress={() => confirmDeleteSavedScan(item)} style={styles.smallAction}>
+                      <Trash2 color={PALETTE.danger} size={18} />
+                    </Pressable>
+                  </View>
+                </Pressable>
+              )}
+            />
+          </View>
+        )}
         {screen === 'detail' && selectedScan && (
           <View style={styles.flex}>
-            <PageHeader title="Scan details" eyebrow="SAVED SCAN" onBack={() => setScreen('gallery')} />
-            <ScrollView contentContainerStyle={styles.finishedContent}>
-              <View style={[styles.finishedCloud, { width: screenWidth, height: screenWidth * 1.05, marginTop: 0 }]}>
+            <PageHeader title="Scan details" eyebrow="SAVED SCAN" onBack={() => setScreen(detailBack)} />
+            <ScrollView contentContainerStyle={styles.finishedContent} keyboardShouldPersistTaps="handled">
+              <NameField value={selectedScan.name} onCommit={(name) => commitRename(selectedScan, name)} />
+              <View style={[styles.finishedCloud, { width: screenWidth, height: screenWidth * 1.05 }]}>
                 <PointCloudView points={selectedPoints} fill zoom={ZOOM} height={screenWidth * 1.05} />
                 <View pointerEvents="none" style={styles.detailCaption}>
                   <Text style={styles.detailDate}>{formatDate(selectedScan.createdAt)}</Text>
@@ -838,7 +1002,7 @@ export default function App() {
                             void deleteScan(scan)
                               .then(() => {
                                 setScans((current) => current.filter((saved) => saved.id !== scan.id));
-                                setScreen('gallery');
+                                setScreen(detailBack);
                               })
                               .catch((reason: unknown) =>
                                 setError(reason instanceof Error ? reason.message : 'Could not delete this scan.'),
@@ -937,8 +1101,8 @@ const styles = StyleSheet.create({
   pageHeader: { minHeight: 74, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 13 },
   backButton: { width: 40, height: 40, borderRadius: 14, backgroundColor: PALETTE.white, alignItems: 'center', justifyContent: 'center' },
   pageHeading: { flex: 1 },
-  eyebrow: { color: PALETTE.moss, fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 3 },
-  pageTitle: { color: PALETTE.ink, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  eyebrow: { color: PALETTE.muted, fontSize: 9, fontWeight: '600', letterSpacing: 1.1, marginTop: 2 },
+  pageTitle: { color: PALETTE.ink, fontSize: 12, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
   headerActionPlaceholder: { width: 40 },
   setupStatus: { backgroundColor: PALETTE.white, borderRadius: 19, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   setupStatusIcon: { width: 43, height: 43, borderRadius: 15, backgroundColor: PALETTE.softGreen, alignItems: 'center', justifyContent: 'center' },
@@ -965,7 +1129,7 @@ const styles = StyleSheet.create({
   durationBadge: { height: 47, minWidth: 60, borderRadius: 14, backgroundColor: PALETTE.softGreen, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 3, paddingHorizontal: 8 },
   durationValue: { color: PALETTE.forest, fontWeight: '800', fontSize: 17 },
   durationUnit: { color: PALETTE.moss, fontWeight: '800', fontSize: 8, marginTop: 5 },
-  slider: { width: '100%', height: 42, marginTop: 13 },
+  slider: { width: '100%', height: 64, marginTop: 4, marginBottom: 4 },
   sliderLabels: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginTop: -3 },
   sliderLabel: { color: PALETTE.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.7 },
   speedNote: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 14, backgroundColor: '#F5F8F5', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
@@ -991,7 +1155,7 @@ const styles = StyleSheet.create({
   progressCenter: { alignItems: 'center', justifyContent: 'center' },
   secondsValue: { color: PALETTE.ink, fontSize: 30, lineHeight: 34, fontWeight: '600', letterSpacing: -2 },
   secondsLabel: { color: PALETTE.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginTop: 3 },
-  progressPercent: { color: PALETTE.forest, fontSize: 10, letterSpacing: 1.5, fontWeight: '800', marginTop: 22 },
+  progressPercent: { color: PALETTE.forest, fontSize: 10, letterSpacing: 1.5, fontWeight: '800', marginTop: 12, marginBottom: 12, textAlign: 'center' },
   progressStatus: { color: PALETTE.muted, fontSize: 12, marginTop: 8 },
   finishedContent: { flexGrow: 1, paddingHorizontal: 23, paddingTop: 17, paddingBottom: 25 },
   completeIcon: { width: 44, height: 44, borderRadius: 18, backgroundColor: '#E5F1D0', alignItems: 'center', justifyContent: 'center' },
@@ -1005,6 +1169,7 @@ const styles = StyleSheet.create({
   finishedDescription: { color: PALETTE.muted, fontSize: 12, marginTop: 8 },
   finishedCloud: { marginHorizontal: -23, marginTop: 18, overflow: 'hidden' },
   detailCloud: { marginTop: 4 },
+  headerIcons: { flexDirection: 'row', gap: 4 },
   thumb: { width: 54, height: 54, borderRadius: 14, backgroundColor: PALETTE.softGreen, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: '100%', height: '100%' },
   selectBox: { width: 24, height: 24, borderRadius: 8, borderWidth: 2, borderColor: '#B8C9C0', alignItems: 'center', justifyContent: 'center' },
