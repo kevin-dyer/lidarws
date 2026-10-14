@@ -18,6 +18,14 @@ On boot, the board starts both its fallback AP and a station connection to the
 configured home Wi-Fi. The host can discover the board over the shared WLAN.
 When offline, connect the host computer to `TiltLidar-Bridge` (or your
 configured fallback SSID) and launch with `board_ip:=192.168.4.1`.
+The mobile host can also provision home Wi-Fi over the fallback connection.
+It sends a control-channel `WIFI` payload containing one-byte SSID and
+password lengths followed by those UTF-8 values. The board stores them in
+ESP32 NVS, acknowledges with `WIFI_OK`, and joins the configured network on
+this boot and subsequent boots. The compile-time values in `wifi_config.h`
+remain the initial defaults when no credentials have been provisioned.
+A control-channel `STATUS` request returns `STATUS,<0|1>,<ip>` so the host can
+verify that the board actually joined the home network and learn its address.
 
 ## Wiring
 

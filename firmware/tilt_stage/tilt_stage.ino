@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <Preferences.h>
 
 #if __has_include("wifi_config.h")
 #include "wifi_config.h"
@@ -64,6 +65,8 @@ uint16_t hostPort = 0;
 bool hostKnown = false;
 bool networkReady = false;
 uint8_t udpRxBuffer[MUX_MAX_DATAGRAM];
+char homeWifiSsid[33];
+char homeWifiPassword[64];
 
 uint16_t crc16Update(uint16_t crc, uint8_t value) {
   crc ^= (uint16_t)value << 8;
@@ -159,8 +162,7 @@ void enqueueTiltBytes(const uint8_t *payload, uint16_t length) {
 
 void forwardLidarCommand(uint8_t value) {
   if (previousLidarCommandByte == 0xA5 &&
-      (value == 0x20 || value == 0x21 || value == 0x40 ||
-       value == 0x50 || value == 0x52)) {
+      (value == 0x20 || value == 0x21 || value == 0x40)) {
     digitalWrite(LIDAR_DTR_PIN, LIDAR_DTR_ACTIVE_LEVEL);
   }
   Serial1.write(value);
@@ -206,6 +208,69 @@ void processUdpFrame(const uint8_t *packet, size_t packetLength,
   }
 
   if (!hostKnown || senderAddress != hostAddress || senderPort != hostPort) {
+    return;
+  }
+  if (channel == MUX_CHANNEL_CONTROL && length >= 6 &&
+      memcmp(payload, "WIFI", 4) == 0) {
+    const uint8_t ssidLength = payload[4];
+    const uint8_t passwordLength = payload[5];
+    if (ssidLength == 0 || ssidLength > 32 ||
+        (passwordLength > 0 && passwordLength < 8) || passwordLength > 63 ||
+        length != (uint16_t)(6 + ssidLength + passwordLength)) {
+      sendMuxFrame(MUX_CHANNEL_CONTROL,
+                   reinterpret_cast<const uint8_t *>("WIFI_ERR"), 8);
+      return;
+    }
+
+    char ssid[33] = {};
+    char password[64] = {};
+    memcpy(ssid, payload + 6, ssidLength);
+    memcpy(password, payload + 6 + ssidLength, passwordLength);
+    if (memchr(ssid, '\0', ssidLength) != NULL ||
+        memchr(password, '\0', passwordLength) != NULL) {
+      sendMuxFrame(MUX_CHANNEL_CONTROL,
+                   reinterpret_cast<const uint8_t *>("WIFI_ERR"), 8);
+      return;
+    }
+
+    Preferences preferences;
+    if (!preferences.begin("tilt-stage", false)) {
+      sendMuxFrame(MUX_CHANNEL_CONTROL,
+                   reinterpret_cast<const uint8_t *>("WIFI_ERR"), 8);
+      return;
+    }
+    uint8_t savedWifi[97] = {
+        ssidLength, passwordLength
+    };
+    memcpy(savedWifi + 2, ssid, ssidLength);
+    memcpy(savedWifi + 2 + ssidLength, password, passwordLength);
+    const size_t savedWifiLength = 2 + ssidLength + passwordLength;
+    const bool saved =
+        preferences.putBytes("wifi", savedWifi, savedWifiLength) == savedWifiLength;
+    preferences.end();
+    if (!saved) {
+      sendMuxFrame(MUX_CHANNEL_CONTROL,
+                   reinterpret_cast<const uint8_t *>("WIFI_ERR"), 8);
+      return;
+    }
+
+    memcpy(homeWifiSsid, ssid, sizeof(homeWifiSsid));
+    memcpy(homeWifiPassword, password, sizeof(homeWifiPassword));
+    sendMuxFrame(MUX_CHANNEL_CONTROL,
+                 reinterpret_cast<const uint8_t *>("WIFI_OK"), 7);
+    WiFi.disconnect(false, false);
+    WiFi.begin(homeWifiSsid, homeWifiPassword);
+    return;
+  }
+  if (channel == MUX_CHANNEL_CONTROL && length == 6 &&
+      memcmp(payload, "STATUS", 6) == 0) {
+    char status[40];
+    const bool joined = WiFi.status() == WL_CONNECTED;
+    const int statusLength = snprintf(
+        status, sizeof(status), "STATUS,%d,%s", joined ? 1 : 0,
+        joined ? WiFi.localIP().toString().c_str() : "0.0.0.0");
+    sendMuxFrame(MUX_CHANNEL_CONTROL, reinterpret_cast<const uint8_t *>(status),
+                 statusLength);
     return;
   }
   if (channel == MUX_CHANNEL_LIDAR) {
@@ -254,6 +319,7 @@ void serviceLidarBridge() {
 bool startNetwork() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
   if (!WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD)) {
     Serial.println("ERROR: could not start fallback Wi-Fi access point");
     return false;
@@ -262,10 +328,35 @@ bool startNetwork() {
   Serial.print(FALLBACK_AP_SSID);
   Serial.print(" at ");
   Serial.println(WiFi.softAPIP());
-  if (strlen(HOME_WIFI_SSID) > 0) {
-    WiFi.begin(HOME_WIFI_SSID, HOME_WIFI_PASSWORD);
+  Preferences preferences;
+  strncpy(homeWifiSsid, HOME_WIFI_SSID, sizeof(homeWifiSsid) - 1);
+  strncpy(homeWifiPassword, HOME_WIFI_PASSWORD, sizeof(homeWifiPassword) - 1);
+  if (preferences.begin("tilt-stage", true)) {
+    const size_t savedWifiLength = preferences.getBytesLength("wifi");
+    uint8_t savedWifi[97];
+    if (savedWifiLength >= 2 && savedWifiLength <= sizeof(savedWifi) &&
+        preferences.getBytes("wifi", savedWifi, savedWifiLength) == savedWifiLength) {
+      const uint8_t ssidLength = savedWifi[0];
+      const uint8_t passwordLength = savedWifi[1];
+      if (ssidLength > 0 && ssidLength <= 32 && passwordLength <= 63 &&
+          (passwordLength == 0 || passwordLength >= 8) &&
+          savedWifiLength == 2 + ssidLength + passwordLength) {
+        memcpy(homeWifiSsid, savedWifi + 2, ssidLength);
+        homeWifiSsid[ssidLength] = '\0';
+        memcpy(homeWifiPassword, savedWifi + 2 + ssidLength, passwordLength);
+        homeWifiPassword[passwordLength] = '\0';
+      } else {
+        Serial.println("WARNING: ignoring invalid saved Wi-Fi settings");
+      }
+    }
+    preferences.end();
+  } else {
+    Serial.println("WARNING: could not read saved Wi-Fi settings");
+  }
+  if (strlen(homeWifiSsid) > 0) {
+    WiFi.begin(homeWifiSsid, homeWifiPassword);
     Serial.print("Joining home Wi-Fi: ");
-    Serial.println(HOME_WIFI_SSID);
+    Serial.println(homeWifiSsid);
   }
   if (!udp.begin(UDP_PORT)) {
     Serial.println("ERROR: could not bind UDP port");
@@ -357,6 +448,11 @@ void setStepMode(int newMode) {
 }
 
 void setSpeed(float speedDegPerSec) {
+  if (!isfinite(speedDegPerSec) || speedDegPerSec <= 0.0 ||
+      speedDegPerSec > MAX_TILT_SPEED_DEG_S) {
+    TiltSerial.println(F("ERR SPEED LIMIT"));
+    return;
+  }
   maxTiltSpeedDegS = speedDegPerSec;
   applyMotorSpeed();
   TiltSerial.print(F("Max tilt speed: "));
@@ -445,14 +541,14 @@ void startTiltSweep(float startAngle, float stopAngle) {
   }
 
   sweepStopSteps = lround(angleToSteps(stopAngle));
-  stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
+  stepper.setMaxSpeed(angleToSteps(HOMING_SPEED_DEG_S));
   tiltMotionState = TILT_MOVING_TO_SWEEP_START;
   stepper.moveTo(lround(angleToSteps(startAngle)));
 }
 
 void stopTiltSweepAndReturnHome() {
   tiltMotionState = TILT_RETURNING_HOME;
-  stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
+  stepper.setMaxSpeed(angleToSteps(HOMING_SPEED_DEG_S));
   stepper.moveTo(0);
 }
 
@@ -477,7 +573,7 @@ void updateTiltMotion() {
     if (stepper.distanceToGo() == 0) {
       emitSweepSample();
       tiltMotionState = TILT_RETURNING_HOME;
-      stepper.setMaxSpeed(angleToSteps(MAX_TILT_SPEED_DEG_S));
+      stepper.setMaxSpeed(angleToSteps(HOMING_SPEED_DEG_S));
       stepper.moveTo(0);
       return;
     }
@@ -772,7 +868,7 @@ void setup() {
   pinMode(DIR_PIN, OUTPUT);
   pinMode(STEP_PIN, OUTPUT);
   pinMode(LIDAR_DTR_PIN, OUTPUT);
-  digitalWrite(LIDAR_DTR_PIN, LIDAR_DTR_ACTIVE_LEVEL);
+  digitalWrite(LIDAR_DTR_PIN, LOW);
 
   digitalWrite(ENABLE_PIN, LOW);
   enabled = true;

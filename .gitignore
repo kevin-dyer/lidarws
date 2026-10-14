@@ -8,6 +8,10 @@
 # Local Wi-Fi credentials for the Nano ESP32 firmware
 /firmware/tilt_stage/wifi_config.h
 
+# Mobile app dependencies and Expo state
+/mobile/node_modules/
+/mobile/.expo/
+
 # Log files
 *.log
 

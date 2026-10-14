@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "3D Lidar Scanner",
+    "slug": "tilt-lidar",
+    "scheme": "tiltlidar",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Find and connect to your 3D lidar scanner on the local Wi-Fi network.",
+        "NSCameraUsageDescription": "Take a reference photo for a completed lidar scan.",
+        "NSPhotoLibraryUsageDescription": "Select a reference photo for a completed lidar scan."
+      },
+      "bundleIdentifier": "com.anonymous.tiltlidar"
+    },
+    "android": {
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.ACCESS_LOCAL_NETWORK",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.tiltlidar"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow 3D Lidar Scanner to take a reference photo for your scan.",
+          "photosPermission": "Allow 3D Lidar Scanner to select a reference photo for your scan."
+        }
+      ]
+    ]
+  }
+}
