@@ -12,6 +12,8 @@ from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import open3d as o3d
+from scipy import ndimage, signal
+from scipy.spatial import cKDTree
 
 from .ply_io import Cloud
 
@@ -64,7 +66,7 @@ def _transform(points: np.ndarray, matrix: np.ndarray) -> np.ndarray:
 
 
 def auto_voxel(clouds: Sequence[Cloud]) -> float:
-    extent = max(float(np.linalg.norm(c.points.max(axis=0) - c.points.min(axis=0))) for c in clouds)
+    extent = max(float(np.linalg.norm(np.percentile(c.points, 99, axis=0) - np.percentile(c.points, 1, axis=0))) for c in clouds)
     return float(np.clip(extent / 200.0, 0.01, 0.2))
 
 
@@ -74,7 +76,7 @@ def _prepare(pcd: o3d.geometry.PointCloud, voxel: float) -> o3d.geometry.PointCl
     return down
 
 
-def global_registration(source, target, voxel: float, params: RegistrationParams):
+def _ransac_registration(source, target, voxel: float, params: RegistrationParams):
     """Coarse alignment of two downsampled clouds without any initial guess."""
     def features(pcd):
         return reg.compute_fpfh_feature(pcd, o3d.geometry.KDTreeSearchParamHybrid(radius=voxel * 6, max_nn=100))
@@ -88,6 +90,73 @@ def global_registration(source, target, voxel: float, params: RegistrationParams
         [reg.CorrespondenceCheckerBasedOnEdgeLength(0.9), reg.CorrespondenceCheckerBasedOnDistance(distance)],
         reg.RANSACConvergenceCriteria(params.ransac_iterations, params.ransac_confidence),
     )
+
+
+def _footprint(points: np.ndarray, yaw: float, cell: float, radius: float, size: int) -> np.ndarray:
+    c, s = np.cos(yaw), np.sin(yaw)
+    x = c * points[:, 0] - s * points[:, 1]
+    y = s * points[:, 0] + c * points[:, 1]
+    ix = np.floor((x + radius) / cell).astype(int)
+    iy = np.floor((y + radius) / cell).astype(int)
+    ok = (ix >= 0) & (ix < size) & (iy >= 0) & (iy < size)
+    grid = np.zeros((size, size))
+    grid[ix[ok], iy[ok]] = 1.0
+    return ndimage.gaussian_filter(grid, 1.0)
+
+
+class _Coarse:
+    def __init__(self, transformation, fitness, correspondences):
+        self.transformation = transformation
+        self.fitness = fitness
+        self.correspondence_set = correspondences
+
+
+def global_registration(source, target, voxel: float, params: RegistrationParams):
+    """Coarse alignment without an initial guess: best of feature-based RANSAC and level-scan search."""
+    guesses = [np.array(_ransac_registration(source, target, voxel, params).transformation)]
+    guesses += planar_candidates(np.asarray(source.points), np.asarray(target.points), voxel)
+    best = None
+    for guess in guesses:
+        # a short, wide ICP makes the candidates comparable
+        refined = reg.registration_icp(
+            source, target, voxel * 4, guess, reg.TransformationEstimationPointToPlane(),
+            reg.ICPConvergenceCriteria(max_iteration=30))
+        if best is None or refined.fitness > best.fitness:
+            best = refined
+    return _Coarse(np.array(best.transformation), best.fitness, best.correspondence_set)
+
+
+def planar_candidates(source: np.ndarray, target: np.ndarray, voxel: float, count: int = 12) -> List[np.ndarray]:
+    """Coarse guesses assuming both scans were taken level (rotation about the vertical axis only).
+
+    Correlates top-down occupancy maps over every yaw and picks the best shifts. Feature matching
+    is unreliable on sparse, noisy room scans; this is a robust complement that ICP then refines.
+    """
+    cell = max(voxel, 0.05)
+    radius = float(max(np.abs(source[:, :2]).max(), np.abs(target[:, :2]).max())) + cell
+    size = int(2 * radius / cell) + 1
+    target_grid = _footprint(target, 0.0, cell, radius, size)
+    scored = []
+    for yaw in np.radians(np.arange(0, 360, 2.0)):
+        corr = signal.fftconvolve(target_grid, _footprint(source, yaw, cell, radius, size)[::-1, ::-1])
+        # exclude shifts that would require more than the full extent
+        n = np.unravel_index(np.argmax(corr), corr.shape)
+        scored.append((float(corr[n]), yaw, (n[0] - (size - 1)) * cell, (n[1] - (size - 1)) * cell))
+    scored.sort(key=lambda item: -item[0])
+
+    tree = cKDTree(target[:, :2])
+    candidates = []
+    for _score, yaw, tx, ty in scored[:count]:
+        c, s = np.cos(yaw), np.sin(yaw)
+        moved = source @ np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]).T + [tx, ty, 0]
+        dist, idx = tree.query(moved[:, :2])
+        close = dist < cell
+        dz = float(np.median(target[idx[close], 2] - moved[close, 2])) if close.sum() > 20 else 0.0
+        t = np.eye(4)
+        t[:3, :3] = [[c, -s, 0], [s, c, 0], [0, 0, 1]]
+        t[:3, 3] = [tx, ty, dz]
+        candidates.append(t)
+    return candidates
 
 
 def local_registration(
