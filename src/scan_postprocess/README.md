@@ -17,3 +17,10 @@ away from the photo border and not on a strong colour edge get a colour; the res
 Per added cloud: FPFH+RANSAC global alignment, then multi-scale point-to-plane ICP, against everything merged
 so far. Exits with code 2 and an error message if alignment is not reliable. The result opens in RViz;
 `--debug` shows every stage live, one colour per scan. `--no-view` skips RViz.
+
+## Shared scan folder (colour + register in one step)
+    ros2 run scan_postprocess process_group ~/Downloads/scans [--debug] [-o outdir]
+
+Finds every `.ply` under the folder (one sub-folder per scan; a photo with the same name is used if present),
+colours those with a photo, then registers all of them (coloured versions preferred) into `processed/registered.ply`.
+Coloured clouds are saved as `processed/<name>_colored.ply`. Scans are ordered by the timestamp in their name.

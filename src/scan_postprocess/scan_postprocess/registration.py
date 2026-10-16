@@ -122,7 +122,7 @@ def local_registration(
     return transform
 
 
-def register_clouds(
+def _register_once(
     clouds: Sequence[Cloud],
     params: Optional[RegistrationParams] = None,
     observer: Optional[Observer] = None,
@@ -203,3 +203,27 @@ def voxel_merge(cloud: Cloud, voxel: float) -> Cloud:
     if out.has_colors():
         colors = np.clip(np.asarray(out.colors) * 255 + 0.5, 0, 255).astype(np.uint8)
     return Cloud(np.asarray(out.points), colors)
+
+
+def register_clouds(
+    clouds: Sequence[Cloud],
+    params: Optional[RegistrationParams] = None,
+    observer: Optional[Observer] = None,
+) -> RegistrationResult:
+    """Aligns all clouds into the frame of the first one and returns the combined cloud.
+
+    With no explicit voxel size, several resolutions are tried because sparse scans align reliably
+    only at a suitable scale; the error from the last attempt is raised if none succeeds.
+    """
+    params = params or RegistrationParams()
+    if params.voxel:
+        return _register_once(clouds, params, observer)
+    base = auto_voxel(clouds)
+    error: Optional[RegistrationError] = None
+    for factor in (1.0, 1.25, 0.8, 1.6, 2.0, 0.6):
+        attempt = RegistrationParams(**{**params.__dict__, 'voxel': base * factor})
+        try:
+            return _register_once(clouds, attempt, observer)
+        except RegistrationError as e:
+            error = e
+    raise error
