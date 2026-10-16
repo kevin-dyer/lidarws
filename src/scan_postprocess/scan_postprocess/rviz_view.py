@@ -79,7 +79,6 @@ class RvizViewer:
         self._mesh_pub = self._node.create_publisher(Marker, MESH_TOPIC, qos)
         self._last = None
         self._last_mesh = None
-        self._mesh_pub = None
         self._rviz: Optional[subprocess.Popen] = None
         if launch_rviz:
             config = _find_rviz_config()
