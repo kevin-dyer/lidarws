@@ -5,6 +5,9 @@ import argparse
 import os
 import sys
 
+import numpy as np
+
+from .calibration import CameraModel, rotation_from_degrees
 from .colorize import FRAMES, colorize_points, load_image
 from .ply_io import Cloud, read_cloud, write_cloud
 
@@ -18,7 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('image', help='reference photo (.jpg/.png)')
     parser.add_argument('-o', '--output', help='output .ply (default: <input>_colored.ply)')
     parser.add_argument('--hfov', type=float, default=65.0,
-                        help='horizontal field of view of the photo in degrees (default 65, a typical phone main camera)')
+                        help='field of view along the photo\'s long side in degrees (default 65)')
+    parser.add_argument('--pitch', type=float, default=0.0, help='camera pitch relative to the scanner (deg)')
+    parser.add_argument('--yaw', type=float, default=0.0, help='camera yaw relative to the scanner (deg)')
+    parser.add_argument('--roll', type=float, default=0.0, help='camera roll relative to the scanner (deg)')
+    parser.add_argument('--offset', type=float, nargs=3, default=(0.0, 0.0, 0.0), metavar=('X', 'Y', 'Z'),
+                        help='camera position in scanner axes (m)')
     parser.add_argument('--frame', choices=sorted(FRAMES), default='frd',
                         help='scanner axes: frd = x forward, y right, z down (default); flu = x forward, y left, z up')
     parser.add_argument('--max-range', type=float, default=30.0, help='ignore points farther than this (m)')
@@ -34,8 +42,12 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     cloud = read_cloud(args.ply)
     image = load_image(args.image)
+    h, w = image.shape[:2]
+    camera = CameraModel.nominal(w, h, args.hfov, args.frame)
+    camera.rotation = camera.rotation @ rotation_from_degrees(args.pitch, args.yaw, args.roll)
+    camera.translation = np.array(args.offset, dtype=float)
     result = colorize_points(
-        cloud.points, image, hfov_deg=args.hfov, frame=args.frame,
+        cloud.points, image, camera=camera, frame=args.frame,
         max_range=args.max_range, max_color_stddev=args.max_color_stddev,
     )
     points, colors = cloud.points, result.colors

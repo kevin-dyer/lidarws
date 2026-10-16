@@ -1,8 +1,9 @@
 """Assign RGB colours from a reference photo to a scanner-frame point cloud.
 
-The photo is assumed to be taken from the scanner position, looking along the scanner's
-forward (+x) axis. Only points that can be matched to the photo with high confidence get a
-colour; see `colorize_points` for the criteria.
+By default the photo is assumed to be taken from the scanner position, looking along the
+scanner's forward (+x) axis; pass a calibrated `camera` (see calibration.py) to use another pose.
+Only points that can be matched to the photo with high confidence get a colour; see
+`colorize_points` for the criteria.
 """
 from __future__ import annotations
 
@@ -12,12 +13,11 @@ import numpy as np
 from PIL import Image, ImageOps
 from scipy import ndimage
 
-# Scanner axes -> camera axes. The raw PLY frame has z pointing down (the mobile app flips z only
-# for display), so the default is x forward / y right / z down.
-FRAMES = {
-    'frd': np.array([1.0, 1.0, 1.0]),  # image right = +y, image down = +z
-    'flu': np.array([1.0, -1.0, -1.0]),  # image right = -y, image down = -z
-}
+from .calibration import AXES, CameraModel
+
+# Supported scanner axis conventions: x forward with y right / z down (frd, the raw PLY frame) or
+# y left / z up (flu).
+FRAMES = AXES
 
 
 @dataclass
@@ -45,6 +45,7 @@ def colorize_points(
     occlusion_slack: float = 0.08,
     max_color_stddev: float = 22.0,
     fill_color: tuple = (128, 128, 128),
+    camera=None,
 ) -> ColorizeResult:
     """Colours the points that are visible in `image` with high confidence.
 
@@ -55,18 +56,12 @@ def colorize_points(
       * the photo is locally uniform at that pixel (no strong edge), so a small calibration or
         registration error cannot pick the colour of the wrong surface.
     """
-    if frame not in FRAMES:
-        raise ValueError(f'Unknown frame {frame!r}; use one of {sorted(FRAMES)}.')
     height, width = image.shape[:2]
-    focal = (width / 2.0) / np.tan(np.radians(hfov_deg) / 2.0)
-    sign = FRAMES[frame]
-
-    depth = points[:, 0]
+    if camera is None:
+        camera = CameraModel.nominal(width, height, hfov_deg, frame)
+    u, v, depth = camera.project(points)
     in_front = depth > 1e-6
-    safe_depth = np.where(in_front, depth, 1.0)
-    u = width / 2.0 + focal * sign[1] * points[:, 1] / safe_depth
-    v = height / 2.0 + focal * sign[2] * points[:, 2] / safe_depth
-    distance = np.linalg.norm(points, axis=1)
+    distance = np.linalg.norm(points - camera.translation, axis=1)
 
     mx, my = edge_margin * width, edge_margin * height
     visible = (

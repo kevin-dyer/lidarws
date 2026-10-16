@@ -8,6 +8,10 @@ import sys
 from datetime import datetime
 from typing import List, Optional
 
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+from .calibration import calibrate_group
 from .colorize import FRAMES, colorize_points, load_image
 from .ply_io import Cloud, read_cloud, write_cloud
 from .meshing import build_mesh, write_mesh
@@ -52,6 +56,43 @@ def find_image(ply: str) -> Optional[str]:
     return None
 
 
+def _colors_or_gray(cloud: Cloud) -> np.ndarray:
+    if cloud.colors is not None:
+        return cloud.colors
+    return np.tile(np.array([128, 128, 128], dtype=np.uint8), (len(cloud), 1))
+
+
+def colorize_scans(plain, images, names, transforms, args, out_dir) -> List[Cloud]:
+    """Colours each photographed scan, first estimating the camera poses from the registered group."""
+    cameras = [None] * len(plain)
+    if not args.no_calibrate:
+        calibration = calibrate_group([c.points for c in plain], images, transforms,
+                                      hfov_deg=args.hfov, frame=args.frame)
+        cameras = calibration.cameras
+        if calibration.improved:
+            print(f'camera calibration: photo/scan brightness disagreement '
+                  f'{calibration.disagreement_before:.2f} -> {calibration.disagreement_after:.2f} '
+                  f'({calibration.matched_points} matched points)')
+            for name, cam in zip(names, cameras):
+                if cam is not None:
+                    angles = Rotation.from_matrix(cam.rotation).as_euler('xyz', degrees=True)
+                    print(f'  {name}: pitch {angles[0]:.1f}, yaw {angles[1]:.1f}, roll {angles[2]:.1f} deg, '
+                          f'fov {cam.fov_deg:.1f} deg, offset {np.round(cam.translation, 2).tolist()} m')
+        else:
+            print('camera calibration: not enough shared view to improve on the nominal camera; using it')
+    clouds = []
+    for cloud, image, name, camera in zip(plain, images, names, cameras):
+        if image is None:
+            clouds.append(cloud)
+            continue
+        result = colorize_points(cloud.points, image, hfov_deg=args.hfov, frame=args.frame, camera=camera)
+        coloured = Cloud(cloud.points, result.colors)
+        write_cloud(os.path.join(out_dir, f'{name}_colored.ply'), coloured)
+        print(f'{name}: coloured {result.stats["colored"]}/{result.stats["points"]} points')
+        clouds.append(coloured)
+    return clouds
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog='process_group',
@@ -59,7 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument('folder', help='folder of shared scans (one sub-folder per scan with .ply and optional .jpg)')
     p.add_argument('-o', '--output-dir', help='where results go (default: <folder>/processed)')
-    p.add_argument('--hfov', type=float, default=65.0, help='photo horizontal field of view in degrees')
+    p.add_argument('--hfov', type=float, default=65.0, help='nominal field of view along the photo\'s long side in degrees (refined by calibration)')
+    p.add_argument('--no-calibrate', action='store_true', help='skip camera pose/focal estimation; assume the photo looks along +x')
     p.add_argument('--frame', choices=sorted(FRAMES), default='frd')
     p.add_argument('--voxel', type=float, help='registration resolution in metres')
     p.add_argument('--merge-voxel', type=float, help='thin the combined cloud to this voxel size (m)')
@@ -85,19 +127,14 @@ def main(argv=None) -> int:
         return 2
     os.makedirs(out_dir, exist_ok=True)
 
-    clouds: List[Cloud] = []
-    for ply in scans:
-        name = os.path.splitext(os.path.basename(ply))[0]
-        cloud = read_cloud(ply)
+    names = [os.path.splitext(os.path.basename(ply))[0] for ply in scans]
+    plain = [read_cloud(ply) for ply in scans]
+    images = []
+    for ply, name in zip(scans, names):
         image_path = find_image(ply)
-        if image_path:
-            result = colorize_points(cloud.points, load_image(image_path), hfov_deg=args.hfov, frame=args.frame)
-            cloud = Cloud(cloud.points, result.colors)
-            write_cloud(os.path.join(out_dir, f'{name}_colored.ply'), cloud)
-            print(f'{name}: coloured {result.stats["colored"]}/{result.stats["points"]} points')
-        else:
+        images.append(load_image(image_path) if image_path else None)
+        if not image_path:
             print(f'{name}: no photo, using plain point cloud')
-        clouds.append(cloud)
 
     viewer = None
     try:
@@ -115,7 +152,9 @@ def main(argv=None) -> int:
                 viewer.show_alignment(stage, items, args.debug_delay)
 
         params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap)
-        result = register_clouds(clouds, params, observer)
+        result = register_clouds(plain, params, observer)
+        clouds = colorize_scans(plain, images, names, result.transformations, args, out_dir)
+        result.cloud = Cloud(result.cloud.points, np.vstack([_colors_or_gray(c) for c in clouds]))
         combined = voxel_merge(result.cloud, args.merge_voxel) if args.merge_voxel else result.cloud
         output = os.path.join(out_dir, 'registered.ply')
         write_cloud(output, combined)

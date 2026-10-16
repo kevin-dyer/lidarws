@@ -79,3 +79,13 @@ def test_registration_fails_on_unrelated_clouds():
     b = rng.normal(size=(20000, 3)) * 2
     with pytest.raises(RegistrationError):
         register_clouds([Cloud(a), Cloud(b)], RegistrationParams(voxel=0.1))
+
+
+def test_camera_pose_shifts_projection():
+    from scan_postprocess.calibration import CameraModel, rotation_from_degrees
+    pts = np.array([[5.0, 0.0, 0.0]])
+    cam = CameraModel.nominal(400, 300, 65.0)
+    u0, v0, _ = cam.project(pts)
+    cam.rotation = cam.rotation @ rotation_from_degrees(0, 10, 0)
+    u1, _, _ = cam.project(pts)
+    assert u0[0] == pytest.approx(200, abs=1) and abs(u1[0] - u0[0]) > 20
