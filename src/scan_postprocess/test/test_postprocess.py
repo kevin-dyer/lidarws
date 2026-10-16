@@ -89,3 +89,11 @@ def test_camera_pose_shifts_projection():
     cam.rotation = cam.rotation @ rotation_from_degrees(0, 10, 0)
     u1, _, _ = cam.project(pts)
     assert u0[0] == pytest.approx(200, abs=1) and abs(u1[0] - u0[0]) > 20
+
+
+def test_align_rotates_vector_onto_target():
+    from scan_postprocess.feature_calibration import _align
+    u = np.array([1.0, 0, 0])
+    v = np.array([0.0, 0.6, 0.8])
+    assert np.allclose(_align(u, v) @ u, v)
+    assert np.allclose(_align(u, -u) @ u, -u)

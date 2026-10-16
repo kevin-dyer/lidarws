@@ -12,7 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', glob('config/*.rviz')),
     ],
-    install_requires=['setuptools', 'numpy', 'scipy', 'pillow'],
+    install_requires=['setuptools', 'numpy', 'scipy', 'pillow', 'opencv-python'],
     zip_safe=True,
     maintainer='kevin',
     maintainer_email='kevin@todo.todo',

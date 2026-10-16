@@ -12,6 +12,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from .calibration import calibrate_group
+from .feature_calibration import calibrate_by_features
 from .colorize import FRAMES, colorize_points, load_image
 from .ply_io import Cloud, read_cloud, write_cloud
 from .meshing import build_mesh, write_mesh
@@ -66,20 +67,27 @@ def colorize_scans(plain, images, names, transforms, args, out_dir) -> List[Clou
     """Colours each photographed scan, first estimating the camera poses from the registered group."""
     cameras = [None] * len(plain)
     if not args.no_calibrate:
-        calibration = calibrate_group([c.points for c in plain], images, transforms,
-                                      hfov_deg=args.hfov, frame=args.frame)
-        cameras = calibration.cameras
-        if calibration.improved:
-            print(f'camera calibration: photo/scan brightness disagreement '
-                  f'{calibration.disagreement_before:.2f} -> {calibration.disagreement_after:.2f} '
-                  f'({calibration.matched_points} matched points)')
-            for name, cam in zip(names, cameras):
-                if cam is not None:
-                    angles = Rotation.from_matrix(cam.rotation).as_euler('xyz', degrees=True)
-                    print(f'  {name}: pitch {angles[0]:.1f}, yaw {angles[1]:.1f}, roll {angles[2]:.1f} deg, '
-                          f'fov {cam.fov_deg:.1f} deg, offset {np.round(cam.translation, 2).tolist()} m')
+        calibration = calibrate_by_features(
+            [c.points for c in plain], images, transforms, hfov_deg=args.hfov, frame=args.frame)
+        if calibration.ok:
+            cameras = calibration.cameras
+            print(f'camera calibration (photo features + lidar): rms {calibration.rms_px:.1f} px, '
+                  f'consistent matches per photo {calibration.inliers}')
+            if calibration.message:
+                print(f'  {calibration.message}')
         else:
-            print('camera calibration: not enough shared view to improve on the nominal camera; using it')
+            print(f'camera calibration from photo features failed ({calibration.message}); '
+                  'trying photometric consistency')
+            fallback = calibrate_group([c.points for c in plain], images, transforms,
+                                       hfov_deg=args.hfov, frame=args.frame)
+            cameras = fallback.cameras
+            if not fallback.improved:
+                print('  not enough shared view to improve on the nominal camera; using it')
+        for name, cam in zip(names, cameras):
+            if cam is not None:
+                angles = Rotation.from_matrix(cam.rotation).as_euler('xyz', degrees=True)
+                print(f'  {name}: pitch {angles[0]:.1f}, yaw {angles[1]:.1f}, roll {angles[2]:.1f} deg, '
+                      f'fov {cam.fov_deg:.1f} deg, offset {np.round(cam.translation, 2).tolist()} m')
     clouds = []
     for cloud, image, name, camera in zip(plain, images, names, cameras):
         if image is None:

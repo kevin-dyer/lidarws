@@ -21,6 +21,12 @@ so far. Exits with code 2 and an error message if alignment is not reliable. The
 `--debug` shows every stage live, one colour per scan. `--no-view` skips RViz.
 
 ## Shared scan folder (colour + register in one step)
+`process_group` first estimates each photo's camera pose from photo features: SIFT matches between the
+photos of overlapping scans give the relative camera geometry; together with the registered scan baseline
+this pins the camera rotations and a shared focal length, and a robust reprojection check against the lidar
+surface refines them. Photos that share no features with the others are fitted to the colours the calibrated
+photos give the other scans. Lens distortion is not modelled (calibrate your phone lens with a checkerboard
+if you need to remove it). If features cannot be matched at all it falls back to the photometric method:
 `process_group` estimates each photo's camera pose (rotation, shared focal length, small offset) automatically:
 it registers the scans on geometry first, then adjusts the cameras so overlapping points get consistent
 brightness across the different photos. This needs at least 2 overlapping scans with photos; the search is
