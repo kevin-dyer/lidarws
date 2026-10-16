@@ -24,3 +24,8 @@ so far. Exits with code 2 and an error message if alignment is not reliable. The
 Finds every `.ply` under the folder (one sub-folder per scan; a photo with the same name is used if present),
 colours those with a photo, then registers all of them (coloured versions preferred) into `processed/registered.ply`.
 Coloured clouds are saved as `processed/<name>_colored.ply`. Scans are ordered by the timestamp in their name.
+
+`process_group` also builds a coloured surface mesh (Poisson reconstruction, `processed/registered_mesh.ply`) and
+shows it in RViz (`/registration/mesh`, "Mesh" display) next to the point cloud. Normals face the scanner that
+captured each point; poorly supported or far-from-data surface is trimmed. Options: `--mesh-depth` (detail,
+default 9), `--no-mesh`. Toggle the Registration/Mesh displays in RViz to compare.

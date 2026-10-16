@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from .colorize import FRAMES, colorize_points, load_image
 from .ply_io import Cloud, read_cloud, write_cloud
+from .meshing import build_mesh, write_mesh
 from .registration import RegistrationError, RegistrationParams, register_clouds, voxel_merge
 
 IMAGE_EXTS = ('.jpg', '.jpeg', '.png')
@@ -28,9 +29,12 @@ def _sort_key(path: str):
     return (1, datetime.min, stem)
 
 
-def find_scans(folder: str) -> List[str]:
+def find_scans(folder: str, exclude_dir: Optional[str] = None) -> List[str]:
     plys = []
+    skip = os.path.abspath(exclude_dir) if exclude_dir else None
     for root, _dirs, files in os.walk(folder):
+        if os.path.basename(root) == 'processed' or (skip and os.path.abspath(root) == skip):
+            continue
         for name in files:
             if name.lower().endswith('.ply') and not name.lower().endswith('_colored.ply'):
                 plys.append(os.path.join(root, name))
@@ -60,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--voxel', type=float, help='registration resolution in metres')
     p.add_argument('--merge-voxel', type=float, help='thin the combined cloud to this voxel size (m)')
     p.add_argument('--min-overlap', type=float, default=0.20)
+    p.add_argument('--no-mesh', action='store_true', help='skip surface reconstruction')
+    p.add_argument('--mesh-depth', type=int, default=9, help='Poisson octree depth; higher = more detail (default 9)')
     p.add_argument('--no-view', action='store_true')
     p.add_argument('--no-rviz', action='store_true')
     p.add_argument('--debug', action='store_true', help='show the alignment live in RViz')
@@ -72,11 +78,11 @@ def main(argv=None) -> int:
     if not os.path.isdir(args.folder):
         print(f'error: {args.folder} is not a folder', file=sys.stderr)
         return 2
-    scans = find_scans(args.folder)
+    out_dir = args.output_dir or os.path.join(args.folder, 'processed')
+    scans = find_scans(args.folder, out_dir)
     if len(scans) < 2:
         print(f'error: need at least two .ply scans in {args.folder}, found {len(scans)}', file=sys.stderr)
         return 2
-    out_dir = args.output_dir or os.path.join(args.folder, 'processed')
     os.makedirs(out_dir, exist_ok=True)
 
     clouds: List[Cloud] = []
@@ -116,8 +122,19 @@ def main(argv=None) -> int:
         for pair in result.pairs:
             print(f'scan {pair.index + 1}: overlap {pair.fine_fitness:.0%}, rms {pair.fine_rmse * 100:.2f} cm')
         print(f'Wrote {output} ({len(combined)} points)')
+        mesh = None
+        if not args.no_mesh:
+            origins = [t[:3, 3] for t in result.transformations]
+            vox = args.merge_voxel or 0.03
+            mesh = build_mesh(combined if args.merge_voxel else result.cloud, result.source_index if not args.merge_voxel else None,
+                              origins, voxel=vox, depth=args.mesh_depth)
+            mesh_path = os.path.join(out_dir, 'registered_mesh.ply')
+            write_mesh(mesh_path, mesh)
+            print(f'Wrote {mesh_path} ({len(mesh.vertices)} vertices, {len(mesh.triangles)} triangles)')
         if viewer:
             viewer.publish(combined.points, combined.colors)
+            if mesh is not None:
+                viewer.publish_mesh(mesh.vertices, mesh.triangles, mesh.colors)
             viewer.hold()
         return 0
     except (RegistrationError, ValueError, IOError, RuntimeError) as error:

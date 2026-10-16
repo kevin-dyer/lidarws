@@ -30,6 +30,16 @@ Visualization Manager:
       Alpha: 1
       Color Transformer: RGB8
       Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Mesh
+      Topic:
+        Value: /registration/mesh
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        History Policy: Keep Last
+      Value: true
   Global Options:
     Background Color: 30; 30; 34
     Fixed Frame: map

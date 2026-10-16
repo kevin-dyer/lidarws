@@ -53,6 +53,7 @@ class RegistrationResult:
     cloud: Cloud
     transformations: List[np.ndarray]
     pairs: List[PairResult] = field(default_factory=list)
+    source_index: Optional[np.ndarray] = None  # which input cloud each output point came from
 
 
 def _to_pcd(points: np.ndarray) -> o3d.geometry.PointCloud:
@@ -259,7 +260,8 @@ def _register_once(
     if any(c.colors is not None for c in clouds):
         gray = np.full((1, 3), 128, dtype=np.uint8)
         colors = np.vstack([c.colors if c.colors is not None else np.tile(gray, (len(c), 1)) for c in clouds])
-    return RegistrationResult(Cloud(points, colors), transforms, pairs)
+    source_index = np.concatenate([np.full(len(c), i) for i, c in enumerate(clouds)])
+    return RegistrationResult(Cloud(points, colors), transforms, pairs, source_index)
 
 
 def voxel_merge(cloud: Cloud, voxel: float) -> Cloud:

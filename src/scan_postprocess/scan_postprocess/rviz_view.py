@@ -9,6 +9,7 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 TOPIC = '/registration/cloud'
+MESH_TOPIC = '/registration/mesh'
 FRAME_ID = 'map'
 MAX_VIEW_POINTS = 400_000
 PALETTE = np.array([
@@ -73,7 +74,12 @@ class RvizViewer:
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                          reliability=ReliabilityPolicy.RELIABLE)
         self._pub = self._node.create_publisher(PointCloud2, TOPIC, qos)
+        from visualization_msgs.msg import Marker
+        self._Marker = Marker
+        self._mesh_pub = self._node.create_publisher(Marker, MESH_TOPIC, qos)
         self._last = None
+        self._last_mesh = None
+        self._mesh_pub = None
         self._rviz: Optional[subprocess.Popen] = None
         if launch_rviz:
             config = _find_rviz_config()
@@ -104,6 +110,26 @@ class RvizViewer:
         self._pub.publish(msg)
         self._rclpy.spin_once(self._node, timeout_sec=0)
 
+    def publish_mesh(self, vertices: np.ndarray, triangles: np.ndarray, colors: Optional[np.ndarray] = None) -> None:
+        from geometry_msgs.msg import Point
+        from std_msgs.msg import ColorRGBA
+        vertices = display_points(vertices, self.frame)
+        if colors is None:
+            colors = height_colors(vertices)
+        marker = self._Marker()
+        marker.header.frame_id = FRAME_ID
+        marker.ns, marker.id = 'registration_mesh', 0
+        marker.type, marker.action = self._Marker.TRIANGLE_LIST, self._Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = marker.scale.y = marker.scale.z = 1.0
+        corners = triangles.reshape(-1)
+        marker.points = [Point(x=float(x), y=float(y), z=float(z)) for x, y, z in vertices[corners]]
+        marker.colors = [ColorRGBA(r=float(r) / 255, g=float(g) / 255, b=float(b) / 255, a=1.0)
+                         for r, g, b in colors[corners]]
+        self._last_mesh = marker
+        self._mesh_pub.publish(marker)
+        self._rclpy.spin_once(self._node, timeout_sec=0)
+
     def show_alignment(self, stage: str, items: Sequence[Tuple[int, np.ndarray]], delay: float = 0.0) -> None:
         """Debug view: every cloud in its own flat colour, so misalignment is visible."""
         points = np.vstack([p for _, p in items])
@@ -120,6 +146,8 @@ class RvizViewer:
                 self._rclpy.spin_once(self._node, timeout_sec=1.0)
                 if self._last is not None:
                     self._pub.publish(self._last)
+                if self._last_mesh is not None:
+                    self._mesh_pub.publish(self._last_mesh)
                 if self._rviz is not None and self._rviz.poll() is not None:
                     break
         except KeyboardInterrupt:
