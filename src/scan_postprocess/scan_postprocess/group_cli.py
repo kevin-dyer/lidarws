@@ -12,6 +12,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from .calibration import calibrate_group
+from .blend import blend_colors
 from .feature_calibration import calibrate_by_features
 from .colorize import FRAMES, colorize_points, load_image
 from .ply_io import Cloud, read_cloud, write_cloud
@@ -63,8 +64,8 @@ def _colors_or_gray(cloud: Cloud) -> np.ndarray:
     return np.tile(np.array([128, 128, 128], dtype=np.uint8), (len(cloud), 1))
 
 
-def colorize_scans(plain, images, names, transforms, args, out_dir) -> List[Cloud]:
-    """Colours each photographed scan, first estimating the camera poses from the registered group."""
+def calibrate_cameras(plain, images, names, transforms, args) -> list:
+    """Estimates each photo's camera pose from the registered group."""
     cameras = [None] * len(plain)
     if not args.no_calibrate:
         calibration = calibrate_by_features(
@@ -88,17 +89,7 @@ def colorize_scans(plain, images, names, transforms, args, out_dir) -> List[Clou
                 angles = Rotation.from_matrix(cam.rotation).as_euler('xyz', degrees=True)
                 print(f'  {name}: pitch {angles[0]:.1f}, yaw {angles[1]:.1f}, roll {angles[2]:.1f} deg, '
                       f'fov {cam.fov_deg:.1f} deg, offset {np.round(cam.translation, 2).tolist()} m')
-    clouds = []
-    for cloud, image, name, camera in zip(plain, images, names, cameras):
-        if image is None:
-            clouds.append(cloud)
-            continue
-        result = colorize_points(cloud.points, image, hfov_deg=args.hfov, frame=args.frame, camera=camera)
-        coloured = Cloud(cloud.points, result.colors)
-        write_cloud(os.path.join(out_dir, f'{name}_colored.ply'), coloured)
-        print(f'{name}: coloured {result.stats["colored"]}/{result.stats["points"]} points')
-        clouds.append(coloured)
-    return clouds
+    return cameras
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -161,8 +152,19 @@ def main(argv=None) -> int:
 
         params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap)
         result = register_clouds(plain, params, observer)
-        clouds = colorize_scans(plain, images, names, result.transformations, args, out_dir)
-        result.cloud = Cloud(result.cloud.points, np.vstack([_colors_or_gray(c) for c in clouds]))
+        transforms = [np.asarray(t) for t in result.transformations]
+        cameras = calibrate_cameras(plain, images, names, transforms, args)
+        if any(im is not None for im in images):
+            blended = blend_colors(result.cloud.points, result.source_index, images, cameras, transforms,
+                                   frame=args.frame, hfov_deg=args.hfov)
+            result.cloud = Cloud(result.cloud.points, blended.colors)
+            print(f'blended colour: {blended.stats["colored"]}/{blended.stats["points"]} points coloured, '
+                  f'{blended.stats["multi_view"]} seen by several photos '
+                  f'(mean disagreement {blended.disagreement:.0f}/255)')
+            for i, name in enumerate(names):
+                mine = np.asarray(result.source_index) == i
+                write_cloud(os.path.join(out_dir, f'{name}_colored.ply'),
+                            Cloud(plain[i].points, blended.colors[mine]))
         combined = voxel_merge(result.cloud, args.merge_voxel) if args.merge_voxel else result.cloud
         output = os.path.join(out_dir, 'registered.ply')
         write_cloud(output, combined)

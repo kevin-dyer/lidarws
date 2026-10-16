@@ -97,3 +97,18 @@ def test_align_rotates_vector_onto_target():
     v = np.array([0.0, 0.6, 0.8])
     assert np.allclose(_align(u, v) @ u, v)
     assert np.allclose(_align(u, -u) @ u, -u)
+
+
+def test_blend_colours_points_seen_by_two_photos():
+    import numpy as np
+    from scan_postprocess.blend import blend_colors
+    from scan_postprocess.calibration import CameraModel
+    rng = np.random.default_rng(0)
+    pts = np.column_stack([rng.uniform(4, 5, 400), rng.uniform(-1, 1, 400), rng.uniform(-1, 1, 400)])
+    image = np.full((120, 160, 3), 200, np.uint8)
+    cam = CameraModel.nominal(160, 120, 90.0, 'frd')
+    eye = np.eye(4)
+    res = blend_colors(pts, np.zeros(400, int), [image, image], [cam, cam], [eye, eye])
+    assert res.confident.any()
+    assert (res.colors[res.confident] == 200).all()
+    assert res.views.max() == 2

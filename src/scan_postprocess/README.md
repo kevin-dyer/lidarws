@@ -35,8 +35,11 @@ regularised towards the nominal pose. Use `--no-calibrate` to skip it.
     ros2 run scan_postprocess process_group ~/Downloads/scans [--debug] [-o outdir]
 
 Finds every `.ply` under the folder (one sub-folder per scan; a photo with the same name is used if present),
-colours those with a photo, then registers all of them (coloured versions preferred) into `processed/registered.ply`.
-Coloured clouds are saved as `processed/<name>_colored.ply`. Scans are ordered by the timestamp in their name.
+registers all of them, calibrates each photo's camera against the registered group (each scan's position is the
+starting guess for its camera), then colours the *merged* cloud from every photo. Where several photos see a point
+they are blended (weighted towards head-on, close views; photos that disagree with the consensus are dropped), and
+occlusion is tested against the merged surface. Output: `processed/registered.ply`; per-scan clouds with the blended
+colours are saved as `processed/<name>_colored.ply`. Camera offsets from the scanner are kept at zero. Scans are ordered by the timestamp in their name.
 
 `process_group` also builds a coloured surface mesh (Poisson reconstruction, `processed/registered_mesh.ply`) and
 shows it in RViz (`/registration/mesh`, "Mesh" display) next to the point cloud. Normals face the scanner that
