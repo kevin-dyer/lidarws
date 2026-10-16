@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -15,7 +15,8 @@ import { ArrowLeft, Check, X } from 'lucide-react-native';
 import WifiManager from 'react-native-wifi-reborn';
 import type { ScannerClient } from '../scanner/ScannerClient';
 import { requestLocalNetworkAccess, requestWifiPermissions } from '../scanner/permissions';
-import { setLastScannerIp } from '../storage/scannerAddress';
+import { loadScannerConfig, saveScannerConfig } from '../storage/appData';
+import { getLastScannerIp, setLastScannerIp } from '../storage/scannerAddress';
 import { PALETTE } from '../theme';
 
 type Phase = 'prepare' | 'join' | 'home' | 'return' | 'done';
@@ -197,6 +198,7 @@ export function SetupWizard({ scanner, onClose, onConnected }: Props) {
       },
     ]);
     if (ok) {
+      void saveScannerConfig({ homeSsid: homeSsid.trim(), apSsid: apSsid.trim(), apPassword }).catch(() => {});
       setHomePassword('');
       await sleep(900);
       goTo('return');
@@ -392,6 +394,197 @@ export function SetupWizard({ scanner, onClose, onConnected }: Props) {
               Found at {finalAddress} on “{homeSsid.trim()}”. Away from home, join the scanner’s own Wi-Fi from this setup.
             </Text>
             <Button title="Finish" onPress={finish} />
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+type ConnectPhase = 'power' | 'network' | 'ap';
+
+/** Walks the user through reconnecting to a scanner that was already set up. */
+export function ConnectWizard({ scanner, onClose, onConnected }: Props) {
+  const [phase, setPhase] = useState<ConnectPhase>('power');
+  const [checks, setChecks] = useState<Check[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [homeSsid, setHomeSsid] = useState<string | undefined>();
+  const [apSsid, setApSsid] = useState('TiltLidar-Bridge');
+  const [apPassword, setApPassword] = useState('');
+
+  useEffect(() => {
+    void loadScannerConfig()
+      .then((config) => {
+        if (!config) return;
+        setHomeSsid(config.homeSsid);
+        if (config.apSsid) setApSsid(config.apSsid);
+        if (config.apPassword) setApPassword(config.apPassword);
+      })
+      .catch(() => {});
+  }, []);
+
+  const steps = homeSsid ? (['power', 'network', 'ap'] as ConnectPhase[]) : (['power', 'ap'] as ConnectPhase[]);
+  const stepIndex = steps.indexOf(phase);
+  const failed = checks.some((check) => check.state === 'fail');
+
+  const run = async (label: string, work: () => Promise<string | void>): Promise<boolean> => {
+    setBusy(true);
+    setChecks([{ label, state: 'running' }]);
+    try {
+      const detail = await work();
+      setChecks([{ label, state: 'ok', detail: detail || undefined }]);
+      return true;
+    } catch (reason) {
+      setChecks([{ label, state: 'fail', detail: messageOf(reason, 'Something went wrong.') }]);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const connected = async (address: string): Promise<void> => {
+    await sleep(600);
+    onConnected(address);
+    onClose();
+  };
+
+  const findScanner = async (): Promise<string> => {
+    scanner.resetSocket();
+    const last = await getLastScannerIp().catch(() => null);
+    return scanner.discover(5000, last ? [last] : []);
+  };
+
+  const checkPower = async (): Promise<void> => {
+    let address = '';
+    const ok = await run('Looking for the scanner', async () => {
+      address = await findScanner();
+      return `Found at ${address}`;
+    });
+    if (ok) await connected(address);
+  };
+
+  const checkNetwork = async (): Promise<void> => {
+    let address = '';
+    const ok = await run(`Phone on “${homeSsid}”`, async () => {
+      await requestWifiPermissions().catch(() => {});
+      let current = '';
+      try {
+        current = clean(await WifiManager.getCurrentWifiSSID());
+      } catch {
+        // Reading the SSID is best effort; searching below is the real test.
+      }
+      if (current && current !== '<unknown ssid>' && current !== homeSsid) {
+        throw new Error(`The phone is on “${current}”. Switch to “${homeSsid}” in Wi-Fi settings, then try again.`);
+      }
+      address = await findScanner();
+      return `Scanner found at ${address}`;
+    });
+    if (ok) await connected(address);
+  };
+
+  const joinScanner = async (): Promise<void> => {
+    const ok = await run(`Join “${apSsid.trim()}”`, async () => {
+      await requestWifiPermissions();
+      try {
+        await WifiManager.connectToProtectedSSID(apSsid.trim(), apPassword, false, false);
+      } catch (reason) {
+        throw new Error(
+          `${messageOf(reason, 'Could not join.')} Check the password, or join it in Wi-Fi settings and tap Try again.`,
+        );
+      }
+      await sleep(1500);
+      scanner.resetSocket();
+      if (!(await scanner.probe(SCANNER_AP_ADDRESS, 6000))) {
+        throw new Error('Joined the Wi-Fi, but the scanner did not answer. Wait a few seconds and try again.');
+      }
+      void saveScannerConfig({ apSsid: apSsid.trim(), apPassword }).catch(() => {});
+      return 'Connected to the scanner';
+    });
+    if (ok) await connected(SCANNER_AP_ADDRESS);
+  };
+
+  const next = (): void => {
+    setChecks([]);
+    setPhase(steps[Math.min(stepIndex + 1, steps.length - 1)]);
+  };
+
+  const titles: Record<ConnectPhase, string> = {
+    power: 'Power and range',
+    network: 'Same Wi-Fi network',
+    ap: 'Use the scanner’s Wi-Fi',
+  };
+
+  return (
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.header}>
+        <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backButton}>
+          <ArrowLeft color={PALETTE.ink} size={22} />
+        </Pressable>
+        <View>
+          <Text style={styles.title}>{titles[phase]}</Text>
+          <Text style={styles.eyebrow}>CONNECT · STEP {stepIndex + 1} OF {steps.length}</Text>
+        </View>
+      </View>
+      <View style={styles.progressRow}>
+        {steps.map((item, index) => (
+          <View key={item} style={[styles.progressBar, index <= stepIndex && styles.progressBarActive]} />
+        ))}
+      </View>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {phase === 'power' && (
+          <>
+            <Text style={styles.lead}>First, make sure the scanner is powered on and within range of your Wi-Fi router or your phone.</Text>
+            <View style={styles.card}>
+              <Text style={styles.bullet}>1. Check that the scanner has power.</Text>
+              <Text style={styles.bullet}>2. Wait about 15 seconds after power-up.</Text>
+              <Text style={styles.bullet}>3. Move closer to the scanner or router if you are far away.</Text>
+            </View>
+            <Checks checks={checks} />
+            <Button title={failed ? 'Try again' : 'Check connection'} busy={busy} onPress={() => void checkPower()} />
+            {failed && <Button title="Still not connecting — next step" kind="outline" onPress={next} />}
+          </>
+        )}
+
+        {phase === 'network' && (
+          <>
+            <Text style={styles.lead}>
+              Your scanner was set up on “{homeSsid}”. Your phone needs to be on the same network.
+            </Text>
+            <Checks checks={checks} />
+            <Button title={failed ? 'Try again' : 'Check network'} busy={busy} onPress={() => void checkNetwork()} />
+            {failed && <Button title="Open Wi-Fi settings" kind="outline" onPress={() => void Linking.openSettings()} />}
+            {failed && <Button title="Still not connecting — next step" kind="outline" onPress={next} />}
+          </>
+        )}
+
+        {phase === 'ap' && (
+          <>
+            <Text style={styles.lead}>
+              Away from home, or if home Wi-Fi is unavailable, your phone can join the scanner’s own Wi-Fi directly.
+            </Text>
+            <View style={styles.card}>
+              <Text style={styles.label}>SCANNER WI-FI NAME</Text>
+              <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setApSsid} style={styles.input} value={apSsid} />
+              <Text style={styles.label}>SCANNER WI-FI PASSWORD</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={setApPassword}
+                placeholder="Set in wifi_config.h (8+ characters)"
+                placeholderTextColor="#9AA79F"
+                secureTextEntry
+                style={styles.input}
+                value={apPassword}
+              />
+            </View>
+            <Checks checks={checks} />
+            <Button
+              title={failed ? 'Try again' : 'Connect to scanner Wi-Fi'}
+              busy={busy}
+              disabled={apSsid.trim().length === 0 || apPassword.length < 8}
+              onPress={() => void joinScanner()}
+            />
+            {failed && <Button title="Open Wi-Fi settings" kind="outline" onPress={() => void Linking.openSettings()} />}
           </>
         )}
       </ScrollView>

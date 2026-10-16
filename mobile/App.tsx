@@ -12,12 +12,14 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { DurationSlider } from './src/components/DurationSlider';
 import * as ImagePicker from 'expo-image-picker';
+import * as MailComposer from 'expo-mail-composer';
 import * as Sharing from 'expo-sharing';
 import Svg, { Circle } from 'react-native-svg';
 import { LidarIcon } from './src/components/LidarIcon';
@@ -31,12 +33,21 @@ import {
   Compass,
   FolderOpen,
   Menu,
+  User,
+  WifiOff,
   Radio,
   Share2,
   Trash2,
   Wifi,
 } from 'lucide-react-native';
-import { SetupWizard } from './src/components/SetupWizard';
+import { ConnectWizard, SetupWizard } from './src/components/SetupWizard';
+import {
+  deleteAllData,
+  loadProfile,
+  loadScannerConfig,
+  saveProfile,
+  saveScannerConfig,
+} from './src/storage/appData';
 import { requestLocalNetworkAccess } from './src/scanner/permissions';
 import { getLastScannerIp } from './src/storage/scannerAddress';
 import { PALETTE } from './src/theme';
@@ -46,15 +57,16 @@ import { ScanCancelledError, ScannerClient, type ScanProgress, type ScanSettings
 import type { Point3 } from './src/scanner/pointCloud';
 import { ScanCarousel } from './src/components/ScanCarousel';
 import { NameField } from './src/components/NameField';
-import { deleteScan, listScans, loadScanPoints, renameScan, saveScan, type SavedScan } from './src/storage/scans';
+import { buildShareFile, deleteScan, listScans, loadScanPoints, renameScan, saveScan, shareableFiles, type SavedScan } from './src/storage/scans';
 
-type Screen = 'home' | 'setup' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'group' | 'detail';
+type Screen = 'home' | 'setup' | 'connect' | 'profile' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'group' | 'detail';
 
 
 const INITIAL_SCAN: ScanSettings = {
   startAngle: -45,
   stopAngle: 45,
   durationSeconds: 15,
+  frontHalfOnly: false,
 };
 
 function AppButton({
@@ -208,6 +220,11 @@ export default function App() {
   const [draggingAngle, setDraggingAngle] = useState(false);
   const [lidarOk, setLidarOk] = useState(true);
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [savedEmail, setSavedEmail] = useState('');
+  const [profile, setProfile] = useState({ username: '', email: '' });
+  const [scanDuration, setScanDuration] = useState(INITIAL_SCAN.durationSeconds);
 
   const scanner = useMemo(
     () =>
@@ -217,6 +234,21 @@ export default function App() {
       ),
     [],
   );
+
+  useEffect(() => {
+    void loadScannerConfig().then((config) => setConfigured(config !== null)).catch(() => {});
+    void getLastScannerIp().then((ip) => ip && setConfigured(true)).catch(() => {});
+    void loadProfile().then((loaded) => {
+      setProfile(loaded);
+      setSavedEmail(loaded.email);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!deviceAddress) return;
+    setConfigured(true);
+    void saveScannerConfig({}).catch(() => {});
+  }, [deviceAddress]);
 
   useEffect(() => {
     void requestLocalNetworkAccess()
@@ -239,7 +271,7 @@ export default function App() {
       .then((result) => {
         if (!stillOnScreen) return;
         setScanPoints(result.points);
-        setScanSettings((current) => ({ ...current, durationSeconds: result.durationSeconds }));
+        setScanDuration(result.durationSeconds);
         setScreen('finished');
       })
       .catch((reason: unknown) => {
@@ -318,10 +350,49 @@ export default function App() {
   const selectedScansFlat = (): SavedScan[] =>
     entries.filter((entry) => selectedIds.includes(entry.key)).flatMap((entry) => entry.scans);
 
-  const shareMany = async (targets: SavedScan[]): Promise<void> => {
-    for (const scan of targets) {
-      await shareSavedScan(scan);
+  const shareViaSheet = async (targets: SavedScan[]): Promise<void> => {
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        throw new Error('The system share sheet is not available on this device.');
+      }
+      const file = await buildShareFile(targets);
+      const zipped = file.endsWith('.zip');
+      await Sharing.shareAsync(file, {
+        dialogTitle: 'Share point cloud',
+        mimeType: zipped ? 'application/zip' : 'application/octet-stream',
+        UTI: zipped ? 'public.zip-archive' : 'public.data',
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not share this scan.');
     }
+  };
+
+  const emailToSelf = async (targets: SavedScan[]): Promise<void> => {
+    try {
+      if (!(await MailComposer.isAvailableAsync())) {
+        throw new Error('No email app is set up on this device.');
+      }
+      await MailComposer.composeAsync({
+        recipients: [savedEmail],
+        subject: targets.length === 1 ? `3D scan: ${targets[0].name}` : `${targets.length} 3D scans`,
+        body: 'Point cloud (PLY) and photo, if any, attached.',
+        attachments: shareableFiles(targets),
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not open the email composer.');
+    }
+  };
+
+  const shareMany = async (targets: SavedScan[]): Promise<void> => {
+    if (!savedEmail || targets.length === 0) {
+      await shareViaSheet(targets);
+      return;
+    }
+    Alert.alert('Share', undefined, [
+      { text: `Email to ${savedEmail}`, onPress: () => void emailToSelf(targets) },
+      { text: 'More options…', onPress: () => void shareViaSheet(targets) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const confirmDeleteMany = (targets: SavedScan[], title: string, onDone?: () => void): void => {
@@ -364,6 +435,43 @@ export default function App() {
     });
   };
 
+  const confirmDeleteAccount = (): void => {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes all of your scans, scanner settings and profile data from this device. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete everything',
+          style: 'destructive',
+          onPress: () => {
+            void deleteAllData()
+              .then(() => {
+                scanner.resetSocket();
+                setScans([]);
+                setSelectedScan(null);
+                setSelectedPoints([]);
+                setOpenGroupId(null);
+                setAddToScan(null);
+                setScanName('');
+                setScanSettings(INITIAL_SCAN);
+                setScanDuration(INITIAL_SCAN.durationSeconds);
+                setProfile({ username: '', email: '' });
+                setSavedEmail('');
+                setConfigured(false);
+                setDeviceAddress(null);
+                setError(null);
+                setScreen('home');
+              })
+              .catch((reason: unknown) =>
+                setError(reason instanceof Error ? reason.message : 'Could not delete your account data.'),
+              );
+          },
+        },
+      ],
+    );
+  };
+
   const refreshDevice = async (): Promise<void> => {
     setBusy(true);
     setError(null);
@@ -398,7 +506,7 @@ export default function App() {
     setSaving(true);
     setError(null);
     try {
-      await saveScan(scanPoints, scanSettings, scanPhoto, { name: scanName, attachTo: addToScan ?? undefined });
+      await saveScan(scanPoints, { ...scanSettings, durationSeconds: scanDuration }, scanPhoto, { name: scanName, attachTo: addToScan ?? undefined });
       setScanPoints([]);
       setScanPhoto(undefined);
       setScanName('');
@@ -428,21 +536,6 @@ export default function App() {
     ]);
   };
 
-  const shareSavedScan = async (scan: SavedScan): Promise<void> => {
-    try {
-      if (!(await Sharing.isAvailableAsync())) {
-        throw new Error('The system share sheet is not available on this device.');
-      }
-      await Sharing.shareAsync(scan.fileUri, {
-        dialogTitle: 'Share point cloud',
-        mimeType: 'application/octet-stream',
-        UTI: 'public.data',
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not share this scan.');
-    }
-  };
-
   const confirmDeleteSavedScan = (scan: SavedScan): void => {
     Alert.alert('Delete saved scan?', `${scan.name} will be removed from this device.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -468,6 +561,7 @@ export default function App() {
     (scanSettings.stopAngle - scanSettings.startAngle) / 10,
   );
   const effectiveDuration = Math.max(scanSettings.durationSeconds, durationMinimum);
+  const showScannerSection = configured || scans.length > 0;
   const tiltSpeed = (scanSettings.stopAngle - scanSettings.startAngle) / effectiveDuration;
 
   return (
@@ -486,7 +580,7 @@ export default function App() {
         ) : null}
 
         {screen === 'home' && (
-          <ScrollView contentContainerStyle={styles.homePage} showsVerticalScrollIndicator={false}>
+          <View style={styles.flex}>
             <View style={styles.homeTopRow}>
               <View style={styles.brand}>
                 <View style={styles.brandMark}><LidarIcon color={PALETTE.lime} size={22} /></View>
@@ -497,91 +591,178 @@ export default function App() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Scanner settings"
-                onPress={() => setScreen('setup')}
+                accessibilityLabel="Menu"
+                onPress={() => setMenuOpen((open) => !open)}
                 style={styles.iconButton}
               >
                 <Menu color={PALETTE.ink} size={22} />
               </Pressable>
             </View>
 
-            {scans.length > 0 ? (
-              <ScanCarousel
-                scans={scans}
-                onOpen={(scan) => openScan(scan, 'home')}
-                onAdd={(scan) => {
-                  setError(null);
-                  setScanSettings(INITIAL_SCAN);
-                  setAddToScan(scan);
-                  setScreen('scan');
-                }}
-              />
-            ) : (
-              <View style={styles.heroCopy}>
-                <Text style={styles.heroKicker}>YOUR WORLD, IN 3D</Text>
-                <Text style={styles.heroTitle}>Capture the{'\n'}shape of a place.</Text>
-                <Text style={styles.heroDescription}>Set up your scanner and turn a moment into a point cloud.</Text>
-              </View>
-            )}
+            <ScrollView contentContainerStyle={styles.homePage} showsVerticalScrollIndicator={false}>
+              {scans.length > 0 ? (
+                <ScanCarousel
+                  scans={scans}
+                  onOpen={(scan) => openScan(scan, 'home')}
+                  onAdd={(scan) => {
+                    setError(null);
+                    setAddToScan(scan);
+                    setScreen('scan');
+                  }}
+                />
+              ) : (
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroKicker}>YOUR WORLD, IN 3D</Text>
+                  <Text style={styles.heroTitle}>Capture the{'\n'}shape of a place.</Text>
+                  <Text style={styles.heroDescription}>Set up your scanner and turn a moment into a point cloud.</Text>
+                </View>
+              )}
 
-            <View style={styles.deviceCard}>
-              <View style={styles.deviceIcon}><Radio size={21} color={PALETTE.forest} /></View>
-              <View style={styles.deviceInfo}>
-                <Text style={styles.cardOverline}>SCANNER</Text>
-                <Text style={styles.deviceTitle}>{!deviceAddress ? 'Scanner not connected' : lidarOk ? 'Lidar connected' : 'Lidar not detected'}</Text>
-                <Text style={styles.deviceSubline}>
-                  {deviceAddress ? (lidarOk ? `Local device · ${deviceAddress}` : 'Check the lidar cable and power') : 'Connect on home Wi-Fi or use its access point'}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={deviceAddress ? 'Refresh connection' : 'Find scanner'}
-                onPress={() => void refreshDevice()}
-                style={styles.refreshButton}
-              >
-                {busy ? <ActivityIndicator size="small" color={PALETTE.forest} /> : <Wifi size={18} color={PALETTE.forest} />}
-              </Pressable>
-            </View>
-
-            <View style={styles.homeActions}>
-              <Text style={styles.sectionTitle}>Ready when you are</Text>
-              <AppButton
-                title="Start a scan"
-                kind="light"
-                icon={<Compass color={PALETTE.forest} size={19} />}
-                onPress={() => {
-                  setError(null);
-                  setScanSettings(INITIAL_SCAN);
-                  setAddToScan(null);
-                  setScreen('scan');
-                }}
-                disabled={!deviceAddress}
-              />
-              {!deviceAddress && (
-                <Pressable onPress={() => setScreen('setup')} style={styles.connectHint}>
-                  <Text style={styles.connectHintText}>Set up scanner connection</Text>
-                  <ChevronRight color={PALETTE.moss} size={16} />
+              {showScannerSection && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={deviceAddress ? 'Refresh connection' : 'Reconnect scanner'}
+                  onPress={() => {
+                    if (deviceAddress) void refreshDevice();
+                    else setScreen(configured ? 'connect' : 'setup');
+                  }}
+                  style={styles.deviceCard}
+                >
+                  <View style={styles.deviceIcon}><Radio size={21} color={PALETTE.forest} /></View>
+                  <View style={styles.deviceInfo}>
+                    <Text style={styles.cardOverline}>SCANNER</Text>
+                    <Text style={styles.deviceTitle}>
+                      {!deviceAddress ? (configured ? 'Not connected' : 'Not set up') : lidarOk ? 'Lidar connected' : 'Lidar not detected'}
+                    </Text>
+                    <Text style={styles.deviceSubline}>
+                      {deviceAddress
+                        ? lidarOk ? `Local device · ${deviceAddress}` : 'Check the lidar cable and power'
+                        : configured ? 'Tap to reconnect' : 'Tap to set up your scanner'}
+                    </Text>
+                  </View>
+                  <View style={styles.refreshButton}>
+                    {busy ? (
+                      <ActivityIndicator size="small" color={PALETTE.forest} />
+                    ) : deviceAddress ? (
+                      <Wifi size={18} color={PALETTE.forest} />
+                    ) : (
+                      <WifiOff size={18} color={PALETTE.danger} />
+                    )}
+                  </View>
                 </Pressable>
               )}
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setScreen('gallery')}
-                style={styles.galleryAction}
-              >
-                <View style={styles.galleryIcon}><FolderOpen color={PALETTE.forest} size={20} /></View>
-                <View style={styles.galleryActionText}>
-                  <Text style={styles.galleryTitle}>Your Scans</Text>
-                  <Text style={styles.gallerySubline}>Your saved point clouds, all in one place</Text>
-                </View>
-                <ChevronRight color={PALETTE.muted} size={20} />
-              </Pressable>
+
+              <View style={styles.homeFooter}>
+                <View style={styles.footerDot} />
+                <Text style={styles.footerText}>Scans are saved privately on this device</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.bottomBar}>
+              {showScannerSection ? (
+                <AppButton
+                  title="Start a scan"
+                  kind="light"
+                  icon={<Compass color={PALETTE.forest} size={19} />}
+                  onPress={() => {
+                    setError(null);
+                    setAddToScan(null);
+                    setScreen('scan');
+                  }}
+                  disabled={!deviceAddress}
+                />
+              ) : (
+                <AppButton
+                  title="Set up lidar"
+                  icon={<LidarIcon color={PALETTE.lime} size={22} />}
+                  onPress={() => setScreen('setup')}
+                />
+              )}
             </View>
 
-            <View style={styles.homeFooter}>
-              <View style={styles.footerDot} />
-              <Text style={styles.footerText}>Scans are saved privately on this device</Text>
-            </View>
-          </ScrollView>
+            {menuOpen && (
+              <>
+                <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={StyleSheet.absoluteFill} />
+                <View style={styles.menuSheet}>
+                  {[
+                    { label: 'Your scans', icon: <FolderOpen color={PALETTE.forest} size={19} />, target: 'gallery' as Screen },
+                    { label: 'Set up scanner', icon: <Radio color={PALETTE.forest} size={19} />, target: 'setup' as Screen },
+                    { label: 'Profile', icon: <User color={PALETTE.forest} size={19} />, target: 'profile' as Screen },
+                  ].map((item) => (
+                    <Pressable
+                      key={item.label}
+                      accessibilityRole="menuitem"
+                      onPress={() => {
+                        setMenuOpen(false);
+                        setScreen(item.target);
+                      }}
+                      style={styles.menuItem}
+                    >
+                      {item.icon}
+                      <Text style={styles.menuItemText}>{item.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {screen === 'connect' && (
+          <ConnectWizard
+            scanner={scanner}
+            onClose={() => setScreen('home')}
+            onConnected={(address) => setDeviceAddress(address)}
+          />
+        )}
+
+        {screen === 'profile' && (
+          <View style={styles.flex}>
+            <PageHeader title="Profile" eyebrow="YOUR ACCOUNT" onBack={() => setScreen('home')} />
+            <ScrollView contentContainerStyle={styles.profileContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.profileLabel}>USERNAME</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={(username) => setProfile((current) => ({ ...current, username }))}
+                placeholder="Choose a username"
+                placeholderTextColor="#98A59E"
+                style={styles.profileInput}
+                value={profile.username}
+              />
+              <Text style={styles.profileLabel}>EMAIL</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                onChangeText={(email) => setProfile((current) => ({ ...current, email }))}
+                placeholder="you@example.com"
+                placeholderTextColor="#98A59E"
+                style={styles.profileInput}
+                value={profile.email}
+              />
+              <View style={styles.profileSave}>
+                <AppButton
+                  title="Save profile"
+                  onPress={() => {
+                    void saveProfile({ username: profile.username.trim(), email: profile.email.trim() })
+                      .then(() => {
+                        setSavedEmail(profile.email.trim());
+                        setScreen('home');
+                      })
+                      .catch(() => setError('Could not save your profile.'));
+                  }}
+                />
+              </View>
+              <Pressable accessibilityRole="button" onPress={confirmDeleteAccount} style={styles.deleteAccount}>
+                <Trash2 color={PALETTE.danger} size={18} />
+                <Text style={styles.deleteAccountText}>Delete account</Text>
+              </Pressable>
+              <Text style={styles.profileNote}>
+                Deleting your account permanently removes all scans, scanner settings and profile data from this device.
+              </Text>
+            </ScrollView>
+          </View>
         )}
 
         {screen === 'setup' && (
@@ -682,6 +863,21 @@ export default function App() {
                 <View style={styles.flex}>
                   <Text style={styles.sectionTitle}>Home before scan</Text>
                   <Text style={styles.deviceSubline}>Re-find the tilt stage zero position first</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: scanSettings.frontHalfOnly === true }}
+                onPress={() => setScanSettings((current) => ({ ...current, frontHalfOnly: !current.frontHalfOnly }))}
+                style={styles.checkRow}
+              >
+                <View style={[styles.checkBox, scanSettings.frontHalfOnly === true && styles.checkBoxOn]}>
+                  {scanSettings.frontHalfOnly === true && <Check size={15} color={PALETTE.white} />}
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.sectionTitle}>Save front half only</Text>
+                  <Text style={styles.deviceSubline}>Keep the front 180° and ignore the back half, which makes registering multiple scans easier</Text>
                 </View>
               </Pressable>
             </ScrollView>
@@ -959,7 +1155,7 @@ export default function App() {
                     </Text>
                   </View>
                   <View style={styles.savedScanActions}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Share point cloud" onPress={() => void shareSavedScan(item)} style={styles.smallAction}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Share point cloud" onPress={() => void shareMany([item])} style={styles.smallAction}>
                       <Share2 color={PALETTE.forest} size={18} />
                     </Pressable>
                     <Pressable accessibilityRole="button" accessibilityLabel="Delete point cloud" onPress={() => confirmDeleteSavedScan(item)} style={styles.smallAction}>
@@ -984,7 +1180,7 @@ export default function App() {
                   <Text style={styles.detailMeta}>{selectedScan.durationSeconds} second sweep</Text>
                 </View>
                 <View style={styles.detailActions}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Share scan" onPress={() => void shareSavedScan(selectedScan)} style={styles.detailIconButton}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Share scan" onPress={() => void shareMany([selectedScan])} style={styles.detailIconButton}>
                     <Share2 color={PALETTE.white} size={19} />
                   </Pressable>
                   <Pressable
@@ -1058,8 +1254,18 @@ function SvgRing({ progress }: { progress: number }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: PALETTE.paper },
   flex: { flex: 1 },
-  homePage: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 25 },
-  homeTopRow: { height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  homePage: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 16 },
+  menuSheet: { position: 'absolute', top: 62, right: 24, minWidth: 200, backgroundColor: PALETTE.white, borderRadius: 18, paddingVertical: 6, borderWidth: 1, borderColor: '#E9EFEB', elevation: 8, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  menuItemText: { color: PALETTE.ink, fontSize: 15, fontWeight: '600' },
+  profileContent: { paddingHorizontal: 22, paddingBottom: 30 },
+  profileLabel: { color: PALETTE.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 18, marginBottom: 8 },
+  profileInput: { backgroundColor: PALETTE.white, borderRadius: 16, borderWidth: 1, borderColor: '#E9EFEB', paddingHorizontal: 16, height: 52, color: PALETTE.ink, fontSize: 16, fontWeight: '600' },
+  profileSave: { marginTop: 26 },
+  deleteAccount: { marginTop: 36, height: 52, borderRadius: 26, backgroundColor: '#F8EAE8', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  deleteAccountText: { color: PALETTE.danger, fontSize: 15, fontWeight: '700' },
+  profileNote: { color: PALETTE.muted, fontSize: 12, lineHeight: 18, marginTop: 12, textAlign: 'center' },
+  homeTopRow: { height: 58, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandMark: { width: 37, height: 37, borderRadius: 13, backgroundColor: PALETTE.forest, alignItems: 'center', justifyContent: 'center' },
   brandName: { color: PALETTE.ink, fontSize: 12, fontWeight: '800', letterSpacing: 1.4 },

@@ -26,7 +26,11 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.tiltlidar"
+      "package": "com.anonymous.tiltlidar",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundColor": "#174D43"
+      }
     },
     "plugins": [
       [
@@ -35,7 +39,9 @@
           "cameraPermission": "Allow 3D Lidar Scanner to take a reference photo for your scan.",
           "photosPermission": "Allow 3D Lidar Scanner to select a reference photo for your scan."
         }
-      ]
-    ]
+      ],
+      "expo-mail-composer"
+    ],
+    "icon": "./assets/icon.png"
   }
 }

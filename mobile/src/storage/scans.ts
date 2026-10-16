@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import JSZip from 'jszip';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Point3 } from '../scanner/pointCloud';
 import { encodeAsciiPly, parseAsciiPly } from '../scanner/pointCloud';
@@ -108,4 +109,37 @@ export async function loadScanPoints(scan: SavedScan, max = 20000): Promise<Poin
   const points = parseAsciiPly(text, max);
   pointCache.set(key, points);
   return points;
+}
+
+const safeName = (value: string): string => value.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'scan';
+
+/** Files (point cloud plus photo, if any) to hand to the email composer. */
+export function shareableFiles(scans: SavedScan[]): string[] {
+  return scans.flatMap((scan) => (scan.photoUri ? [scan.fileUri, scan.photoUri] : [scan.fileUri]));
+}
+
+/**
+ * Returns a single file to share. A lone scan without a photo is shared as-is; anything else is
+ * bundled into a zip because the system share sheet takes one file at a time.
+ */
+export async function buildShareFile(scans: SavedScan[]): Promise<string> {
+  if (scans.length === 1 && !scans[0].photoUri) return scans[0].fileUri;
+  const zip = new JSZip();
+  const used = new Set<string>();
+  for (const scan of scans) {
+    let base = safeName(scan.name);
+    while (used.has(base)) base = `${base}_${scan.id.slice(-4)}`;
+    used.add(base);
+    const folder = scans.length > 1 ? (zip.folder(base) as JSZip) : zip;
+    const ply = await FileSystem.readAsStringAsync(scan.fileUri);
+    folder.file(`${base}.ply`, ply);
+    if (scan.photoUri) {
+      const photo = await FileSystem.readAsStringAsync(scan.photoUri, { encoding: FileSystem.EncodingType.Base64 });
+      folder.file(`${base}.jpg`, photo, { base64: true });
+    }
+  }
+  const data = await zip.generateAsync({ type: 'base64' });
+  const target = `${FileSystem.cacheDirectory}${scans.length > 1 ? 'scans' : safeName(scans[0].name)}.zip`;
+  await FileSystem.writeAsStringAsync(target, data, { encoding: FileSystem.EncodingType.Base64 });
+  return target;
 }

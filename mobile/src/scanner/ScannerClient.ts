@@ -22,6 +22,7 @@ export interface ScanSettings {
   stopAngle: number;
   durationSeconds: number;
   homeBeforeScan?: boolean;
+  frontHalfOnly?: boolean;
 }
 
 export interface ScanProgress {
@@ -57,6 +58,7 @@ export class ScannerClient {
   private tiltText = '';
   private currentTiltDeg = 0;
   private captureActive = false;
+  private frontHalfOnly = false;
   private scanning = false;
   private lastPongAt = 0;
   private lastLidarRxAt = 0;
@@ -234,6 +236,7 @@ export class ScannerClient {
     }
 
     this.scanning = true;
+    this.frontHalfOnly = settings.frontHalfOnly === true;
     this.points.length = 0;
     this.onPoints = onPoints;
     this.lastPointsEmit = 0;
@@ -369,7 +372,7 @@ export class ScannerClient {
       if (!this.scanning) return;
       this.lidarParser.push(frame.payload, (rays) => {
         if (this.captureActive) {
-          this.points.push(...raysToWorldPoints(rays, this.currentTiltDeg));
+          this.points.push(...raysToWorldPoints(rays, this.currentTiltDeg, this.frontHalfOnly));
           const now = Date.now();
           if (this.onPoints && now - this.lastPointsEmit >= 300) {
             this.lastPointsEmit = now;

@@ -5,6 +5,7 @@ export type Point3 = [number, number, number];
 export function raysToWorldPoints(
   rays: Ray[],
   tiltDeg: number,
+  frontHalfOnly = false,
   azimuthOffsetDeg = 90,
   minRangeM = 0.05,
   maxRangeM = 30,
@@ -20,6 +21,7 @@ export function raysToWorldPoints(
     const azimuth = ((ray.azimuthDeg + azimuthOffsetDeg) * Math.PI) / 180;
     const localX = ray.rangeM * Math.cos(azimuth);
     const localY = ray.rangeM * Math.sin(azimuth);
+    if (frontHalfOnly && localX < 0) continue;
     const world = [cosTilt * localX, localY, sinTilt * localX] as const;
     if (world.every(Number.isFinite)) {
       points.push([world[0], world[1], world[2]]);
