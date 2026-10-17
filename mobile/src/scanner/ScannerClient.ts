@@ -23,6 +23,10 @@ export interface ScanSettings {
   durationSeconds: number;
   homeBeforeScan?: boolean;
   frontHalfOnly?: boolean;
+  /** Crop applied to the saved point cloud; `sweepDeg` is centred on the scanner's front. */
+  minRangeM?: number;
+  maxRangeM?: number;
+  sweepDeg?: number;
 }
 
 export interface ScanProgress {
@@ -44,6 +48,16 @@ export class ScanCancelledError extends Error {
   }
 }
 
+export class ConnectionLostError extends Error {
+  constructor() {
+    super('Lost connection to the scanner. Check that it is powered on and in range, then try again.');
+    this.name = 'ConnectionLostError';
+  }
+}
+
+const SILENCE_LIMIT_MS = 6000;
+const PREVIEW_IDLE_MS = 3000;
+
 type LineWaiter = {
   predicate: (line: string) => boolean;
   resolve: (line: string) => void;
@@ -59,10 +73,20 @@ export class ScannerClient {
   private currentTiltDeg = 0;
   private captureActive = false;
   private frontHalfOnly = false;
+  private crop: { minRangeM?: number; maxRangeM?: number; sweepDeg?: number } = {};
+  private lastRxAt = 0;
+  private tiltChain: Promise<void> = Promise.resolve();
+  private tiltHomed = false;
+  private tiltBusy = 0;
+  private cancelRequested = false;
+  private previewTarget: number | null = null;
+  private previewAngleNow = 0;
+  private previewWorkerRunning = false;
+  private previewIdleTimer: ReturnType<typeof setTimeout> | undefined;
   private scanning = false;
   private lastPongAt = 0;
   private lastLidarRxAt = 0;
-  private cancelActiveScan: (() => void) | null = null;
+  private cancelActiveScan: ((error: Error) => void) | null = null;
   private lineWaiters: LineWaiter[] = [];
   private readonly lidarParser = new RplidarParser();
   private readonly points: Point3[] = [];
@@ -100,6 +124,7 @@ export class ScannerClient {
     this.socket = this.createSocket();
     this.bound = false;
     this.boardAddress = null;
+    this.tiltHomed = false;
     this.onDeviceChange(null);
   }
 
@@ -143,7 +168,7 @@ export class ScannerClient {
 
   /** Verifies the board answers and that the lidar responds to a health request. */
   async checkConnection(timeoutMs = 1500): Promise<'ok' | 'lidar-missing' | 'offline'> {
-    if (this.scanning) return 'ok';
+    if (this.scanning || this.tiltBusy > 0) return 'ok';
     const address = this.boardAddress;
     if (!address) return 'offline';
     const started = Date.now();
@@ -235,8 +260,14 @@ export class ScannerClient {
       throw new Error('Choose a start angle below the stop angle, within ±45°.');
     }
 
+    this.endPreviewTimers();
+    this.previewTarget = null;
     this.scanning = true;
+    this.cancelRequested = false;
+    this.lastRxAt = Date.now();
+    this.previewAngleNow = 0;
     this.frontHalfOnly = settings.frontHalfOnly === true;
+    this.crop = { minRangeM: settings.minRangeM, maxRangeM: settings.maxRangeM, sweepDeg: settings.sweepDeg };
     this.points.length = 0;
     this.onPoints = onPoints;
     this.lastPointsEmit = 0;
@@ -248,11 +279,16 @@ export class ScannerClient {
     const expectedDuration = actualDuration + returnSeconds;
     let sweepStartedAt = 0;
     let timer: ReturnType<typeof setInterval> | undefined;
+    const watchdog = setInterval(() => {
+      if (!this.boardAddress) return;
+      this.sendControl(new Uint8Array([80, 73, 78, 71]));
+      if (Date.now() - this.lastRxAt > SILENCE_LIMIT_MS) this.abortScan(new ConnectionLostError());
+    }, 1000);
     const cancellable = <T,>(work: Promise<T>): Promise<T> =>
       Promise.race([
         work,
         new Promise<never>((_, reject) => {
-          this.cancelActiveScan = () => reject(new ScanCancelledError());
+          this.cancelActiveScan = (error) => reject(error);
         }),
       ]);
 
@@ -268,6 +304,9 @@ export class ScannerClient {
     };
 
     try {
+      // A preview move or homing may still be running; the scan waits for the stage to settle.
+      await this.tiltChain;
+      if (this.cancelRequested) throw new ScanCancelledError();
       const homing = settings.homeBeforeScan !== false;
       update({
         phase: 'preparing',
@@ -332,15 +371,101 @@ export class ScannerClient {
       }
       this.lineWaiters = [];
       if (timer) clearInterval(timer);
+      clearInterval(watchdog);
     }
   }
 
   cancelScan(): void {
     if (!this.scanning) return;
+    this.cancelRequested = true;
     this.captureActive = false;
     this.sendLidar(new Uint8Array([0xa5, 0x25]));
     this.sendTilt('X\n');
-    this.cancelActiveScan?.();
+    this.cancelActiveScan?.(new ScanCancelledError());
+  }
+
+  private abortScan(error: Error): void {
+    for (const waiter of this.lineWaiters) {
+      clearTimeout(waiter.timeout);
+      waiter.reject(error);
+    }
+    this.lineWaiters = [];
+    this.cancelActiveScan?.(error);
+  }
+
+  private enqueueTilt(task: () => Promise<void>): Promise<void> {
+    this.tiltBusy += 1;
+    this.tiltChain = this.tiltChain.then(task).catch(() => {}).then(() => {
+      this.tiltBusy -= 1;
+    });
+    return this.tiltChain;
+  }
+
+  private endPreviewTimers(): void {
+    if (this.previewIdleTimer) clearTimeout(this.previewIdleTimer);
+    this.previewIdleTimer = undefined;
+  }
+
+  /** Homes the tilt stage when the start-scan page opens. Moves are queued behind it. */
+  beginPreview(): void {
+    if (this.scanning || !this.boardAddress) return;
+    this.endPreviewTimers();
+    this.previewTarget = null;
+    this.tiltHomed = false;
+    void this.enqueueTilt(async () => {
+      if (this.scanning) return;
+      const done = this.waitForTiltLine((line) => /^T-?\d/.test(line) || line.startsWith('Error homing'), 90000);
+      this.sendTilt('A\n');
+      const line = await done;
+      this.tiltHomed = !line.startsWith('Error homing');
+      this.previewAngleNow = 0;
+    });
+  }
+
+  /** Points the tilt stage at an angle so it can be eyeballed; returns home after a quiet spell. */
+  previewAngle(angleDeg: number): void {
+    if (this.scanning) return;
+    this.previewTarget = angleDeg;
+    this.endPreviewTimers();
+    this.previewIdleTimer = setTimeout(() => this.previewTarget !== null && this.returnPreviewHome(), PREVIEW_IDLE_MS);
+    this.startPreviewWorker();
+  }
+
+  /** Sends the stage home immediately (leaving the start-scan page). */
+  endPreview(): void {
+    this.endPreviewTimers();
+    if (this.previewTarget === null && this.previewAngleNow === 0) return;
+    this.returnPreviewHome();
+  }
+
+  private returnPreviewHome(): void {
+    this.endPreviewTimers();
+    this.previewTarget = 0;
+    this.startPreviewWorker();
+  }
+
+  private startPreviewWorker(): void {
+    if (this.previewWorkerRunning) return;
+    this.previewWorkerRunning = true;
+    void this.enqueueTilt(async () => {
+      try {
+        while (this.previewTarget !== null && !this.scanning && this.tiltHomed) {
+          const target = this.previewTarget;
+          if (target !== this.previewAngleNow) {
+            const done = this.waitForTiltLine((line) => /^T-?\d/.test(line) || line === 'LIMIT', 20000);
+            this.sendTilt(`M${target.toFixed(2)}\n`);
+            await done;
+            this.previewAngleNow = target;
+          }
+          if (this.previewTarget === target) {
+            if (target === 0) this.previewTarget = null;
+            break;
+          }
+        }
+      } finally {
+        this.previewWorkerRunning = false;
+      }
+    });
   }
 
   close(): void {
@@ -351,6 +476,7 @@ export class ScannerClient {
 
   private receive(packet: Uint8Array, sender: string): void {
     this.packetsReceived += 1;
+    if (sender === this.boardAddress) this.lastRxAt = Date.now();
     const frame = decodeFrame(packet);
     if (!frame) return;
     if (frame.channel === CHANNEL_CONTROL) {
@@ -372,7 +498,15 @@ export class ScannerClient {
       if (!this.scanning) return;
       this.lidarParser.push(frame.payload, (rays) => {
         if (this.captureActive) {
-          this.points.push(...raysToWorldPoints(rays, this.currentTiltDeg, this.frontHalfOnly));
+          this.points.push(...raysToWorldPoints(
+            rays,
+            this.currentTiltDeg,
+            this.frontHalfOnly,
+            90,
+            this.crop.minRangeM ?? 0.05,
+            this.crop.maxRangeM ?? 30,
+            this.crop.sweepDeg,
+          ));
           const now = Date.now();
           if (this.onPoints && now - this.lastPointsEmit >= 300) {
             this.lastPointsEmit = now;

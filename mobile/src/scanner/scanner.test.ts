@@ -85,6 +85,22 @@ describe('RPLIDAR and point-cloud conversion', () => {
     expect(point[2]).toBeCloseTo(1);
   });
 
+  it('crops by range and by a horizontal sweep centred on the front', () => {
+    // azimuth 270 + 90 offset = 0 deg from forward; 0 and 180 are straight ahead and behind
+    const rays = [
+      { azimuthDeg: 270, rangeM: 2 }, // ahead
+      { azimuthDeg: 270 + 60, rangeM: 2 }, // 60 deg to one side
+      { azimuthDeg: 270 + 180, rangeM: 2 }, // behind
+      { azimuthDeg: 270, rangeM: 6 }, // ahead but far
+    ];
+    expect(raysToWorldPoints(rays, 0)).toHaveLength(4);
+    expect(raysToWorldPoints(rays, 0, true)).toHaveLength(3);
+    expect(raysToWorldPoints(rays, 0, false, 90, 0.05, 30, 90)).toHaveLength(2);
+    expect(raysToWorldPoints(rays, 0, false, 90, 0.05, 30, 360)).toHaveLength(4);
+    expect(raysToWorldPoints(rays, 0, false, 90, 0.05, 5)).toHaveLength(3);
+    expect(raysToWorldPoints(rays, 0, false, 90, 3)).toHaveLength(1);
+  });
+
   it('writes a standard ASCII PLY vertex list', () => {
     const ply = encodeAsciiPly([[1, 2, 3]]);
     expect(ply).toContain('format ascii 1.0');

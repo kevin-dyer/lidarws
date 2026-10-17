@@ -27,6 +27,8 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  ChevronDown,
+  ChevronUp,
   Layers,
   ChevronRight,
   Clock3,
@@ -57,7 +59,8 @@ import { ScanCancelledError, ScannerClient, type ScanProgress, type ScanSettings
 import type { Point3 } from './src/scanner/pointCloud';
 import { ScanCarousel } from './src/components/ScanCarousel';
 import { NameField } from './src/components/NameField';
-import { buildShareFile, deleteScan, listScans, loadScanPoints, renameScan, saveScan, shareableFiles, type SavedScan } from './src/storage/scans';
+import { GroupPicker, type GroupChoice } from './src/components/GroupPicker';
+import { buildShareFile, deleteScan, listScans, loadScanPoints, removeScanPhoto, renameScan, saveScan, setScansGroup, shareableFiles, type SavedScan } from './src/storage/scans';
 
 type Screen = 'home' | 'setup' | 'connect' | 'profile' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'group' | 'detail';
 
@@ -225,6 +228,10 @@ export default function App() {
   const [savedEmail, setSavedEmail] = useState('');
   const [profile, setProfile] = useState({ username: '', email: '' });
   const [scanDuration, setScanDuration] = useState(INITIAL_SCAN.durationSeconds);
+  const [scanGroupId, setScanGroupId] = useState<string | undefined>();
+  const [picker, setPicker] = useState<'scan' | 'detail' | 'select' | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [crop, setCrop] = useState({ min: '', max: '', sweep: '' });
 
   const scanner = useMemo(
     () =>
@@ -283,6 +290,12 @@ export default function App() {
       stillOnScreen = false;
     };
   }, [screen, scanner, scanSettings]);
+
+  useEffect(() => {
+    if (screen !== 'scan' || !deviceAddress) return undefined;
+    scanner.beginPreview();
+    return () => scanner.endPreview();
+  }, [screen, deviceAddress, scanner]);
 
   useEffect(() => {
     if (!deviceAddress || screen === 'scanning' || screen === 'setup') return undefined;
@@ -453,6 +466,8 @@ export default function App() {
                 setSelectedPoints([]);
                 setOpenGroupId(null);
                 setAddToScan(null);
+                setScanGroupId(undefined);
+                setCrop({ min: '', max: '', sweep: '' });
                 setScanName('');
                 setScanSettings(INITIAL_SCAN);
                 setScanDuration(INITIAL_SCAN.durationSeconds);
@@ -506,11 +521,12 @@ export default function App() {
     setSaving(true);
     setError(null);
     try {
-      await saveScan(scanPoints, { ...scanSettings, durationSeconds: scanDuration }, scanPhoto, { name: scanName, attachTo: addToScan ?? undefined });
+      await saveScan(scanPoints, { ...scanSettings, durationSeconds: scanDuration }, scanPhoto, { name: scanName, groupId: scanGroupId, anchorId: addToScan?.id });
       setScanPoints([]);
       setScanPhoto(undefined);
       setScanName('');
       setAddToScan(null);
+      setScanGroupId(undefined);
       setScreen('home');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save the point cloud.');
@@ -530,6 +546,7 @@ export default function App() {
           setScanPhoto(undefined);
           setScanName('');
           setAddToScan(null);
+          setScanGroupId(undefined);
           setScreen('home');
         },
       },
@@ -554,8 +571,90 @@ export default function App() {
   };
 
   const selectAngle = (startAngle: number, stopAngle: number): void => {
+    if (startAngle !== scanSettings.startAngle) scanner.previewAngle(startAngle);
+    else if (stopAngle !== scanSettings.stopAngle) scanner.previewAngle(stopAngle);
     setScanSettings((current) => ({ ...current, startAngle, stopAngle }));
   };
+
+  const groupOptions = useMemo(
+    () => entries.filter((entry) => entry.groupId).map((entry) => ({
+      id: entry.groupId as string,
+      title: groupTitle(entry.scans),
+      count: entry.scans.length,
+    })),
+    [entries],
+  );
+  const groupLabel = (id?: string): string =>
+    !id ? 'No group' : groupOptions.find((group) => group.id === id)?.title ?? 'New group';
+  const resolveGroup = (choice: GroupChoice): string | undefined =>
+    choice.type === 'none' ? undefined : choice.type === 'new' ? `group_${Date.now()}` : choice.id;
+
+  const pickGroup = (choice: GroupChoice): void => {
+    const groupId = resolveGroup(choice);
+    if (picker === 'scan') {
+      setAddToScan(null);
+      setScanGroupId(groupId);
+    } else if (picker === 'detail' && selectedScan) {
+      const id = selectedScan.id;
+      void setScansGroup([id], groupId)
+        .then(() => {
+          const apply = (saved: SavedScan): SavedScan => {
+            if (saved.id !== id) return saved;
+            const { groupId: _old, ...rest } = saved;
+            return groupId ? { ...rest, groupId } : rest;
+          };
+          setScans((current) => current.map(apply));
+          setSelectedScan((current) => (current ? apply(current) : current));
+        })
+        .catch(() => setError('Could not change the group.'));
+    } else if (picker === 'select') {
+      const ids = selectedScansFlat().map((scan) => scan.id);
+      void setScansGroup(ids, groupId)
+        .then(() => listScans())
+        .then(setScans)
+        .then(() => {
+          setSelectedIds([]);
+          setSelecting(false);
+        })
+        .catch(() => setError('Could not change the group.'));
+    }
+  };
+
+  const deleteDetailPhoto = (scan: SavedScan): void => {
+    Alert.alert('Delete the photo?', 'The point cloud is kept.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete photo',
+        style: 'destructive',
+        onPress: () => {
+          void removeScanPhoto(scan)
+            .then(() => {
+              const strip = (saved: SavedScan): SavedScan => {
+                if (saved.id !== scan.id) return saved;
+                const { photoUri: _photo, ...rest } = saved;
+                return rest;
+              };
+              setScans((current) => current.map(strip));
+              setSelectedScan((current) => (current ? strip(current) : current));
+            })
+            .catch(() => setError('Could not delete the photo.'));
+        },
+      },
+    ]);
+  };
+
+  const numberOrUndefined = (text: string): number | undefined => (text.trim() === '' ? undefined : Number(text));
+  const minRange = numberOrUndefined(crop.min);
+  const maxRange = numberOrUndefined(crop.max);
+  const sweepEntered = numberOrUndefined(crop.sweep);
+  const sweepOverrides = sweepEntered !== undefined && sweepEntered !== 180 && sweepEntered !== 360;
+  const frontHalfChecked = sweepEntered !== undefined ? sweepEntered === 180 : scanSettings.frontHalfOnly === true;
+  const effectiveSweep = sweepEntered ?? (scanSettings.frontHalfOnly ? 180 : 360);
+  const cropError =
+    (minRange !== undefined && !(minRange >= 0)) ||
+    (maxRange !== undefined && !(maxRange > 0)) ||
+    (minRange !== undefined && maxRange !== undefined && maxRange <= minRange) ||
+    (sweepEntered !== undefined && !(sweepEntered > 0 && sweepEntered <= 360));
 
   const durationMinimum = Math.ceil(
     (scanSettings.stopAngle - scanSettings.startAngle) / 10,
@@ -563,6 +662,56 @@ export default function App() {
   const effectiveDuration = Math.max(scanSettings.durationSeconds, durationMinimum);
   const showScannerSection = configured || scans.length > 0;
   const tiltSpeed = (scanSettings.stopAngle - scanSettings.startAngle) / effectiveDuration;
+
+  const renderPhotoCard = (): ReactNode => (
+    <Pressable accessibilityRole="button" onPress={() => void takeScanPhoto()} style={styles.photoCard}>
+      {scanPhoto ? (
+        <Image source={{ uri: scanPhoto }} style={styles.photoPreview} onLoadEnd={() => setPhotoLoading(false)} />
+      ) : (
+        <View style={styles.photoPlaceholder}>
+          <View style={styles.photoIcon}><Camera color={PALETTE.forest} size={21} /></View>
+          <Text style={styles.photoTitle}>Add a reference photo</Text>
+          <Text style={styles.photoSubline}>Optional · taken with your camera</Text>
+        </View>
+      )}
+      {scanPhoto && <Text style={styles.replacePhoto}>TAP TO RETAKE</Text>}
+      {scanPhoto && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Remove photo"
+          onPress={() => setScanPhoto(undefined)}
+          style={styles.removePhoto}
+        >
+          <Trash2 color={PALETTE.white} size={16} />
+        </Pressable>
+      )}
+      {photoLoading && (
+        <View style={styles.photoLoading}>
+          <ActivityIndicator size="large" color={PALETTE.forest} />
+          <Text style={styles.photoSubline}>Processing photo…</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+
+  const renderGroupRow = (id: string | undefined, onPress: () => void): ReactNode => (
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.groupRow}>
+      <Layers color={PALETTE.forest} size={19} />
+      <View style={styles.flex}>
+        <Text style={styles.readoutLabel}>GROUP</Text>
+        <Text style={styles.groupRowValue} numberOfLines={1}>{groupLabel(id)}</Text>
+      </View>
+      <ChevronRight color={PALETTE.muted} size={18} />
+    </Pressable>
+  );
+
+  const renderScanMeta = (): ReactNode => (
+    <View>
+      <NameField value={scanName} onChangeText={setScanName} />
+      {renderPhotoCard()}
+      {renderGroupRow(scanGroupId, () => setPicker('scan'))}
+    </View>
+  );
 
   return (
     <SafeAreaProvider>
@@ -607,6 +756,7 @@ export default function App() {
                   onAdd={(scan) => {
                     setError(null);
                     setAddToScan(scan);
+                    setScanGroupId(scan.groupId ?? `group_${scan.id}`);
                     setScreen('scan');
                   }}
                 />
@@ -666,7 +816,6 @@ export default function App() {
                   icon={<Compass color={PALETTE.forest} size={19} />}
                   onPress={() => {
                     setError(null);
-                    setAddToScan(null);
                     setScreen('scan');
                   }}
                   disabled={!deviceAddress}
@@ -779,7 +928,10 @@ export default function App() {
               title={addToScan ? 'Add another scan' : 'New 3D scan'}
               eyebrow="CAPTURE"
               onBack={() => {
-                setAddToScan(null);
+                if (addToScan) {
+                  setAddToScan(null);
+                  setScanGroupId(undefined);
+                }
                 setScreen('home');
               }}
             />
@@ -868,18 +1020,70 @@ export default function App() {
 
               <Pressable
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: scanSettings.frontHalfOnly === true }}
-                onPress={() => setScanSettings((current) => ({ ...current, frontHalfOnly: !current.frontHalfOnly }))}
-                style={styles.checkRow}
+                accessibilityState={{ checked: frontHalfChecked && !sweepOverrides, disabled: sweepOverrides }}
+                disabled={sweepOverrides}
+                onPress={() => {
+                  setCrop((current) => ({ ...current, sweep: '' }));
+                  setScanSettings((current) => ({ ...current, frontHalfOnly: !frontHalfChecked }));
+                }}
+                style={[styles.checkRow, sweepOverrides && styles.buttonDisabled]}
               >
-                <View style={[styles.checkBox, scanSettings.frontHalfOnly === true && styles.checkBoxOn]}>
-                  {scanSettings.frontHalfOnly === true && <Check size={15} color={PALETTE.white} />}
+                <View style={[styles.checkBox, frontHalfChecked && !sweepOverrides && styles.checkBoxOn]}>
+                  {frontHalfChecked && !sweepOverrides && <Check size={15} color={PALETTE.white} />}
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.sectionTitle}>Save front half only</Text>
-                  <Text style={styles.deviceSubline}>Keep the front 180° and ignore the back half, which makes registering multiple scans easier</Text>
+                  <Text style={styles.deviceSubline}>
+                    {sweepOverrides
+                      ? 'Overridden by the horizontal sweep angle in advanced options'
+                      : 'Keep the front 180° and ignore the back half, which makes registering multiple scans easier'}
+                  </Text>
                 </View>
               </Pressable>
+
+              <View style={styles.scanCard}>
+                <Text style={styles.sectionTitle}>Scan details</Text>
+                <Text style={styles.deviceSubline}>Optional. You can still edit these after the scan.</Text>
+                {renderScanMeta()}
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: advancedOpen }}
+                onPress={() => setAdvancedOpen((open) => !open)}
+                style={styles.checkRow}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.sectionTitle}>Advanced options</Text>
+                  <Text style={styles.deviceSubline}>Crop the saved point cloud to focus on an object</Text>
+                </View>
+                {advancedOpen ? <ChevronUp size={20} color={PALETTE.muted} /> : <ChevronDown size={20} color={PALETTE.muted} />}
+              </Pressable>
+              {advancedOpen && (
+                <View style={styles.scanCard}>
+                  {([
+                    ['Minimum distance (m)', 'min', '0'],
+                    ['Maximum distance (m)', 'max', '30'],
+                    ['Horizontal sweep angle (°)', 'sweep', frontHalfChecked ? '180' : '360'],
+                  ] as const).map(([label, key, placeholder]) => (
+                    <View key={key} style={styles.cropField}>
+                      <Text style={styles.profileLabel}>{label.toUpperCase()}</Text>
+                      <TextInput
+                        keyboardType="decimal-pad"
+                        onChangeText={(text) => setCrop((current) => ({ ...current, [key]: text }))}
+                        placeholder={placeholder}
+                        placeholderTextColor="#98A59E"
+                        style={styles.profileInput}
+                        value={crop[key]}
+                      />
+                    </View>
+                  ))}
+                  <Text style={styles.deviceSubline}>
+                    The sweep is centred on the front of the scanner. Points outside these limits are dropped before saving.
+                  </Text>
+                  {cropError && <Text style={styles.cropError}>Maximum must be above minimum, and the sweep between 1° and 360°.</Text>}
+                </View>
+              )}
             </ScrollView>
             <View style={styles.bottomBar}>
               <AppButton
@@ -887,7 +1091,13 @@ export default function App() {
                 icon={<LidarIcon color={PALETTE.lime} size={22} />}
                 onPress={() => {
                   setError(null);
-                  setScanPhoto(undefined);
+                  setScanSettings((current) => ({
+                    ...current,
+                    minRangeM: minRange,
+                    maxRangeM: maxRange,
+                    sweepDeg: effectiveSweep,
+                    frontHalfOnly: effectiveSweep === 180,
+                  }));
                   setScanProgress({
                     phase: 'preparing',
                     percent: 0,
@@ -896,9 +1106,10 @@ export default function App() {
                   });
                   setScreen('scanning');
                 }}
-                disabled={!deviceAddress}
+                disabled={!deviceAddress || cropError}
               />
               {!deviceAddress && <Text style={styles.bottomHint}>Connect to your scanner to begin.</Text>}
+              {deviceAddress && cropError && <Text style={styles.bottomHint}>Check the advanced crop values.</Text>}
             </View>
           </View>
         )}
@@ -963,29 +1174,7 @@ export default function App() {
                 {scanPoints.length.toLocaleString()} points captured · {effectiveDuration} second sweep
               </Text>
               {addToScan && <Text style={styles.cloudCaption}>Will be grouped with “{addToScan.name}”</Text>}
-              <NameField value={scanName} onChangeText={setScanName} />
-              <Pressable accessibilityRole="button" onPress={() => void takeScanPhoto()} style={styles.photoCard}>
-                {scanPhoto ? (
-                  <Image
-                    source={{ uri: scanPhoto }}
-                    style={styles.photoPreview}
-                    onLoadEnd={() => setPhotoLoading(false)}
-                  />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <View style={styles.photoIcon}><Camera color={PALETTE.forest} size={21} /></View>
-                    <Text style={styles.photoTitle}>Add a reference photo</Text>
-                    <Text style={styles.photoSubline}>Optional · taken with your camera</Text>
-                  </View>
-                )}
-                {scanPhoto && <Text style={styles.replacePhoto}>TAP TO RETAKE</Text>}
-                {photoLoading && (
-                  <View style={styles.photoLoading}>
-                    <ActivityIndicator size="large" color={PALETTE.forest} />
-                    <Text style={styles.photoSubline}>Processing photo…</Text>
-                  </View>
-                )}
-              </Pressable>
+              {renderScanMeta()}
               <View style={styles.finishedActions}>
                 <AppButton
                   title={saving ? 'Saving point cloud…' : 'Save point cloud'}
@@ -1029,6 +1218,14 @@ export default function App() {
                     title={`Share${selectedIds.length ? ` (${selectedIds.length})` : ''}`}
                     icon={<Share2 color={PALETTE.lime} size={18} />}
                     onPress={() => void shareSelected()}
+                    disabled={selectedIds.length === 0}
+                  />
+                </View>
+                <View style={styles.selectBarButton}>
+                  <AppButton
+                    title="Group"
+                    kind="light"
+                    onPress={() => setPicker('select')}
                     disabled={selectedIds.length === 0}
                   />
                 </View>
@@ -1212,14 +1409,31 @@ export default function App() {
                   </Pressable>
                 </View>
               </View>
+              {renderGroupRow(selectedScan.groupId, () => setPicker('detail'))}
               {selectedScan.photoUri ? (
                 <View style={styles.photoCard}>
                   <Image source={{ uri: selectedScan.photoUri }} style={styles.photoPreview} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete photo"
+                    onPress={() => deleteDetailPhoto(selectedScan)}
+                    style={styles.removePhoto}
+                  >
+                    <Trash2 color={PALETTE.white} size={16} />
+                  </Pressable>
                 </View>
               ) : null}
             </ScrollView>
           </View>
         )}
+        <GroupPicker
+          visible={picker !== null}
+          title={picker === 'select' ? 'Move selected to a group' : 'Choose a group'}
+          groups={groupOptions}
+          current={picker === 'scan' ? scanGroupId : picker === 'detail' ? selectedScan?.groupId : undefined}
+          onPick={pickGroup}
+          onClose={() => setPicker(null)}
+        />
         </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
@@ -1354,6 +1568,11 @@ const styles = StyleSheet.create({
   cloudWrap: { flex: 1, alignSelf: 'stretch', marginHorizontal: -24, paddingBottom: 6 },
   progressOverlay: { position: 'absolute', top: 8, right: 16, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 60, padding: 4 },
   homingTitle: { color: PALETTE.ink, fontSize: 20, fontWeight: '700', marginTop: 22 },
+  cropField: { marginBottom: 6 },
+  cropError: { color: PALETTE.danger, fontSize: 12, marginTop: 8 },
+  groupRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: PALETTE.white, borderRadius: 16, borderWidth: 1, borderColor: '#E9EFEB', paddingHorizontal: 16, paddingVertical: 12, marginTop: 14 },
+  groupRowValue: { color: PALETTE.ink, fontSize: 15, fontWeight: '600', marginTop: 2 },
+  removePhoto: { position: 'absolute', top: 10, right: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(23,51,44,0.75)', alignItems: 'center', justifyContent: 'center' },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: PALETTE.white, borderRadius: 20, padding: 18, marginTop: 14 },
   checkBox: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: '#B8C9C0', alignItems: 'center', justifyContent: 'center' },
   checkBoxOn: { backgroundColor: PALETTE.forest, borderColor: PALETTE.forest },

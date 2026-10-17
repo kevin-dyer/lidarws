@@ -38,7 +38,7 @@ export async function saveScan(
   points: Point3[],
   settings: { durationSeconds: number; startAngle: number; stopAngle: number },
   photoSourceUri?: string,
-  options: { name?: string; attachTo?: SavedScan } = {},
+  options: { name?: string; groupId?: string; anchorId?: string } = {},
 ): Promise<SavedScan> {
   const directory = FileSystem.documentDirectory;
   if (!directory) {
@@ -67,11 +67,10 @@ export async function saveScan(
   };
   try {
     const existing = await readScans();
-    if (options.attachTo) {
-      const anchor = existing.find((saved) => saved.id === options.attachTo?.id);
-      const groupId = anchor?.groupId ?? `group_${options.attachTo.id}`;
-      if (anchor) anchor.groupId = groupId;
-      scan.groupId = groupId;
+    if (options.groupId) {
+      scan.groupId = options.groupId;
+      const anchor = options.anchorId ? existing.find((saved) => saved.id === options.anchorId) : undefined;
+      if (anchor && !anchor.groupId) anchor.groupId = options.groupId;
     }
     await writeScans([scan, ...existing]);
   } catch (error) {
@@ -88,6 +87,29 @@ export async function renameScan(id: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (!trimmed) return;
   await writeScans((await readScans()).map((saved) => (saved.id === id ? { ...saved, name: trimmed } : saved)));
+}
+
+/** Sets (or, with undefined, clears) the group of every listed scan. */
+export async function setScansGroup(ids: string[], groupId: string | undefined): Promise<void> {
+  await writeScans(
+    (await readScans()).map((saved) => {
+      if (!ids.includes(saved.id)) return saved;
+      const { groupId: _old, ...rest } = saved;
+      return groupId ? { ...rest, groupId } : rest;
+    }),
+  );
+}
+
+/** Deletes a scan's photo file and forgets it. */
+export async function removeScanPhoto(scan: SavedScan): Promise<void> {
+  if (scan.photoUri) await FileSystem.deleteAsync(scan.photoUri, { idempotent: true });
+  await writeScans(
+    (await readScans()).map((saved) => {
+      if (saved.id !== scan.id) return saved;
+      const { photoUri: _photo, ...rest } = saved;
+      return rest;
+    }),
+  );
 }
 
 export async function deleteScan(scan: SavedScan): Promise<void> {

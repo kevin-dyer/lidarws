@@ -9,7 +9,9 @@ export function raysToWorldPoints(
   azimuthOffsetDeg = 90,
   minRangeM = 0.05,
   maxRangeM = 30,
+  sweepDeg?: number,
 ): Point3[] {
+  const halfSweep = sweepDeg !== undefined && sweepDeg < 360 ? sweepDeg / 2 : undefined;
   const tilt = (tiltDeg * Math.PI) / 180;
   const cosTilt = Math.cos(tilt);
   const sinTilt = Math.sin(tilt);
@@ -21,7 +23,12 @@ export function raysToWorldPoints(
     const azimuth = ((ray.azimuthDeg + azimuthOffsetDeg) * Math.PI) / 180;
     const localX = ray.rangeM * Math.cos(azimuth);
     const localY = ray.rangeM * Math.sin(azimuth);
-    if (frontHalfOnly && localX < 0) continue;
+    if (halfSweep !== undefined) {
+      // Angle from the scanner's forward axis, so the kept wedge is centred on the front.
+      if (Math.abs((Math.atan2(localY, localX) * 180) / Math.PI) > halfSweep) continue;
+    } else if (frontHalfOnly && localX < 0) {
+      continue;
+    }
     const world = [cosTilt * localX, localY, sinTilt * localX] as const;
     if (world.every(Number.isFinite)) {
       points.push([world[0], world[1], world[2]]);

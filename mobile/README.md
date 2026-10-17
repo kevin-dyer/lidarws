@@ -66,6 +66,15 @@ limits scanning to 10°/s; durations shorter than the selected angular span
 allows are raised to the physically achievable minimum. At the default 90°
 span this minimum is 9 seconds.
 
+Opening the Start Scan page homes the tilt stage. Dragging a start or stop
+angle moves the stage to that angle so it can be checked by eye; after 3
+seconds without a change it returns home. A name, photo and group (existing or
+new) can be set before scanning and edited afterwards. **Advanced options**
+crop the saved cloud by minimum distance, maximum distance and horizontal
+sweep (centred on the front; 180° equals *front half only*, and any other value
+overrides that checkbox). If the scanner stops responding during a scan the app
+shows an error and returns to Start Scan.
+
 After capture, the user can optionally take a reference photo, save the point
 cloud, or discard it. Saved `.ply` files can be shared using the iOS or Android
 system share sheet (including AirDrop or email). The app keeps scans and
