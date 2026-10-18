@@ -496,7 +496,13 @@ void moveToAbsoluteAngle(float angle) {
     return;
   }
   const long target = lround(angleToSteps(angle));
+  // Positioning moves run at the homing speed; only sweeps are limited to the scan speed.
+  const float previousSpeed = maxTiltSpeedDegS;
+  maxTiltSpeedDegS = HOMING_SPEED_DEG_S;
+  applyMotorSpeed();
   runToPositionWithBridge(target);
+  maxTiltSpeedDegS = previousSpeed;
+  applyMotorSpeed();
   queryTiltAngle();
 }
 

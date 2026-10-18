@@ -427,7 +427,6 @@ export class ScannerClient {
     if (this.scanning) return;
     this.previewTarget = angleDeg;
     this.endPreviewTimers();
-    this.previewIdleTimer = setTimeout(() => this.previewTarget !== null && this.returnPreviewHome(), PREVIEW_IDLE_MS);
     this.startPreviewWorker();
   }
 
@@ -459,6 +458,10 @@ export class ScannerClient {
           }
           if (this.previewTarget === target) {
             if (target === 0) this.previewTarget = null;
+            else {
+              // Only count the quiet period once the stage has actually arrived.
+              this.previewIdleTimer = setTimeout(() => this.returnPreviewHome(), PREVIEW_IDLE_MS);
+            }
             break;
           }
         }
