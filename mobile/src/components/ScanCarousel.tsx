@@ -43,7 +43,7 @@ function ScanCard({ scan, width, onPress, onAdd }: { scan: SavedScan; width: num
 
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={[styles.card, { width }]}>
-      <PointCloudView points={points} fill height={CARD_HEIGHT} zoom={1.6} interactive={false} rounded />
+      <PointCloudView points={points} fill height={CARD_HEIGHT} zoom={1.6} interactive={false} autoRotate rounded />
       {scan.photoUri ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: photoOpacity }]}>
           <Image source={{ uri: scan.photoUri }} style={styles.photo} />

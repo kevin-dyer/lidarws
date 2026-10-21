@@ -1041,7 +1041,7 @@ export default function App() {
                 </View>
               </Pressable>
 
-              <View style={styles.scanCard}>
+              <View style={styles.formSection}>
                 <Text style={styles.sectionTitle}>Scan details</Text>
                 <Text style={styles.deviceSubline}>Optional. You can still edit these after the scan.</Text>
                 {renderScanMeta()}
@@ -1060,7 +1060,7 @@ export default function App() {
                 {advancedOpen ? <ChevronUp size={20} color={PALETTE.muted} /> : <ChevronDown size={20} color={PALETTE.muted} />}
               </Pressable>
               {advancedOpen && (
-                <View style={styles.scanCard}>
+                <View style={styles.formSection}>
                   {([
                     ['Minimum distance (m)', 'min', '0'],
                     ['Maximum distance (m)', 'max', '30'],
@@ -1078,7 +1078,7 @@ export default function App() {
                       />
                     </View>
                   ))}
-                  <Text style={styles.deviceSubline}>
+                  <Text style={[styles.deviceSubline, styles.formSectionNote]}>
                     The sweep is centred on the front of the scanner. Points outside these limits are dropped before saving.
                   </Text>
                   {cropError && <Text style={styles.cropError}>Maximum must be above minimum, and the sweep between 1° and 360°.</Text>}
@@ -1536,8 +1536,10 @@ const styles = StyleSheet.create({
   helperBox: { flexDirection: 'row', gap: 9, alignItems: 'center', paddingHorizontal: 5, paddingTop: 17 },
   helperText: { flex: 1, color: PALETTE.muted, fontSize: 11, lineHeight: 16 },
   scanPageContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 22 },
-  introText: { color: PALETTE.muted, fontSize: 13, marginHorizontal: 4, marginBottom: 15 },
-  scanCard: { backgroundColor: PALETTE.white, borderRadius: 21, paddingHorizontal: 16, paddingVertical: 17, marginBottom: 14, borderWidth: 1, borderColor: '#E9EFEB', alignItems: 'center' },
+  introText: { color: PALETTE.muted, fontSize: 13, marginHorizontal: 4 },
+  formSection: { marginTop: 14 },
+  formSectionNote: { marginTop: 10 },
+  scanCard: { backgroundColor: PALETTE.white, borderRadius: 21, paddingHorizontal: 16, paddingVertical: 17, marginTop: 14, borderWidth: 1, borderColor: '#E9EFEB', alignItems: 'center' },
   cardTitleRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 1 },
   dragLabel: { color: PALETTE.moss, fontSize: 8, fontWeight: '800', letterSpacing: 1 },
   angleReadouts: { width: '100%', borderTopWidth: 1, borderColor: '#EDF1EE', paddingTop: 13, marginTop: -4, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
@@ -1566,9 +1568,9 @@ const styles = StyleSheet.create({
   progressWrap: { alignItems: 'center', justifyContent: 'center', flex: 1, width: '100%', minHeight: 310 },
   progressRing: { width: 104, height: 104, alignItems: 'center', justifyContent: 'center' },
   cloudWrap: { flex: 1, alignSelf: 'stretch', marginHorizontal: -24, paddingBottom: 6 },
-  progressOverlay: { position: 'absolute', top: 8, right: 16, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 60, padding: 4 },
+  progressOverlay: { position: 'absolute', top: 8, left: 16, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 60, padding: 4 },
   homingTitle: { color: PALETTE.ink, fontSize: 20, fontWeight: '700', marginTop: 22 },
-  cropField: { marginBottom: 6 },
+  cropField: { marginBottom: 2 },
   cropError: { color: PALETTE.danger, fontSize: 12, marginTop: 8 },
   groupRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: PALETTE.white, borderRadius: 16, borderWidth: 1, borderColor: '#E9EFEB', paddingHorizontal: 16, paddingVertical: 12, marginTop: 14 },
   groupRowValue: { color: PALETTE.ink, fontSize: 15, fontWeight: '600', marginTop: 2 },
@@ -1588,7 +1590,7 @@ const styles = StyleSheet.create({
   detailCaption: { position: 'absolute', left: 24, bottom: 16 },
   detailDate: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   detailMeta: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
-  detailActions: { position: 'absolute', right: 24, top: 16, flexDirection: 'row', gap: 10 },
+  detailActions: { position: 'absolute', right: 24, top: 62, flexDirection: 'row', gap: 10 },
   detailIconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(75,85,99,0.85)', alignItems: 'center', justifyContent: 'center' },
   cloudCaption: { color: PALETTE.muted, fontSize: 12, marginTop: 10, textAlign: 'center' },
   finishedDescription: { color: PALETTE.muted, fontSize: 12, marginTop: 8 },
@@ -1602,7 +1604,7 @@ const styles = StyleSheet.create({
   selectBar: { flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingTop: 8 },
   selectBarButton: { flex: 1 },
   headerLink: { color: PALETTE.forest, fontWeight: '700', fontSize: 13, paddingHorizontal: 4 },
-  photoCard: { marginTop: 23, borderWidth: 1, borderColor: '#DDE7E0', borderStyle: 'dashed', borderRadius: 19, minHeight: 147, overflow: 'hidden', backgroundColor: '#F7F9F7' },
+  photoCard: { marginTop: 14, borderWidth: 1, borderColor: '#DDE7E0', borderStyle: 'dashed', borderRadius: 19, minHeight: 147, overflow: 'hidden', backgroundColor: '#F7F9F7' },
   photoPlaceholder: { minHeight: 147, alignItems: 'center', justifyContent: 'center' },
   photoIcon: { width: 43, height: 43, borderRadius: 15, backgroundColor: PALETTE.softGreen, alignItems: 'center', justifyContent: 'center' },
   photoTitle: { color: PALETTE.ink, fontSize: 13, fontWeight: '700', marginTop: 10 },

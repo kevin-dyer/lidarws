@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, View } from 'react-native';
+import { Modal, PanResponder, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import type { GestureResponderEvent } from 'react-native';
+import { Maximize2, Minimize2 } from 'lucide-react-native';
 import { Canvas, Points, vec } from '@shopify/react-native-skia';
 import type { Point3 } from '../scanner/pointCloud';
 import { decimate, HEIGHT_BANDS, projectPoints } from '../scanner/projection';
@@ -16,14 +18,71 @@ interface Props {
   interactive?: boolean;
   rounded?: boolean;
   autoRotate?: boolean;
+  fullscreenButton?: boolean;
 }
 
-export function PointCloudView({ points, size = 260, fill = false, zoom = 1, height, autoRotate = true, interactive = true, rounded = false }: Props) {
+// Looking at the scene from the scanner, straight ahead.
+const HEAD_ON_YAW = 0;
+const HEAD_ON_PITCH = 0.12;
+const MIN_SCALE = 0.4;
+const MAX_SCALE = 12;
+
+const touchesOf = (event: GestureResponderEvent) => {
+  const touches = event.nativeEvent.touches;
+  return touches.length >= 2
+    ? { count: 2, cx: (touches[0].pageX + touches[1].pageX) / 2, cy: (touches[0].pageY + touches[1].pageY) / 2,
+        dist: Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY) }
+    : { count: touches.length, cx: 0, cy: 0, dist: 0 };
+};
+
+export function PointCloudView(props: Props) {
+  const [full, setFull] = useState(false);
+  const { width: winW, height: winH } = useWindowDimensions();
+  const showButton = props.fullscreenButton ?? (props.interactive ?? true);
+  return (
+    <>
+      <CloudCanvas {...props} onFullscreen={showButton ? () => setFull(true) : undefined} />
+      <Modal visible={full} animationType="fade" onRequestClose={() => setFull(false)} statusBarTranslucent>
+        <View style={styles.fullBackdrop}>
+          <View
+            style={[
+              styles.fullRotated,
+              { width: winH, height: winW, left: (winW - winH) / 2, top: (winH - winW) / 2 },
+            ]}
+          >
+            <CloudCanvas
+              points={props.points}
+              fill
+              zoom={props.zoom}
+              autoRotate={false}
+              rotated
+              onClose={() => setFull(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+interface CanvasProps extends Props {
+  rotated?: boolean;
+  onFullscreen?: () => void;
+  onClose?: () => void;
+}
+
+function CloudCanvas({
+  points, size = 260, fill = false, zoom = 1, height, autoRotate = false, interactive = true,
+  rounded = false, rotated = false, onFullscreen, onClose,
+}: CanvasProps) {
   const [box, setBox] = useState({ width: size, height: size });
-  const [yaw, setYaw] = useState(0.4);
-  const [pitch, setPitch] = useState(0.35);
+  const [yaw, setYaw] = useState(autoRotate ? 0.4 : HEAD_ON_YAW);
+  const [pitch, setPitch] = useState(autoRotate ? 0.35 : HEAD_ON_PITCH);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const last = useRef({ x: 0, y: 0 });
+  const pinch = useRef<{ dist: number; cx: number; cy: number } | null>(null);
 
   useEffect(() => {
     if (!autoRotate) return undefined;
@@ -33,29 +92,55 @@ export function PointCloudView({ points, size = 260, fill = false, zoom = 1, hei
     return () => clearInterval(timer);
   }, [autoRotate]);
 
+  // The fullscreen view is the page turned 90° clockwise, so screen motion maps to view motion.
+  const toView = (dx: number, dy: number) => (rotated ? { x: dy, y: -dx } : { x: dx, y: dy });
+
   const pan = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onPanResponderGrant: (_, g) => {
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (event, g) => {
           dragging.current = true;
           last.current = { x: g.x0, y: g.y0 };
+          pinch.current = null;
         },
-        onPanResponderMove: (_, g) => {
-          const dx = g.moveX - last.current.x;
-          const dy = g.moveY - last.current.y;
+        onPanResponderMove: (event, g) => {
+          const touch = touchesOf(event);
+          if (touch.count >= 2) {
+            const previous = pinch.current;
+            pinch.current = { dist: touch.dist, cx: touch.cx, cy: touch.cy };
+            if (previous && previous.dist > 0) {
+              const ratio = touch.dist / previous.dist;
+              setScale((value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, value * ratio)));
+              const move = toView(touch.cx - previous.cx, touch.cy - previous.cy);
+              setOffset((value) => ({ x: value.x + move.x, y: value.y + move.y }));
+            }
+            last.current = { x: g.moveX, y: g.moveY };
+            return;
+          }
+          if (pinch.current) {
+            // Back to one finger: restart the orbit from the current position.
+            pinch.current = null;
+            last.current = { x: g.moveX, y: g.moveY };
+            return;
+          }
+          const move = toView(g.moveX - last.current.x, g.moveY - last.current.y);
           last.current = { x: g.moveX, y: g.moveY };
-          setYaw((v) => v + dx * 0.01);
-          setPitch((v) => Math.max(-1.4, Math.min(1.4, v + dy * 0.01)));
+          setYaw((v) => v + move.x * 0.01);
+          setPitch((v) => Math.max(-1.4, Math.min(1.4, v + move.y * 0.01)));
         },
         onPanResponderRelease: () => {
           dragging.current = false;
+          pinch.current = null;
         },
         onPanResponderTerminate: () => {
           dragging.current = false;
+          pinch.current = null;
         },
       }),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rotated],
   );
 
   const sample = useMemo(() => decimate(points, MAX_DISPLAY_POINTS), [points]);
@@ -69,11 +154,11 @@ export function PointCloudView({ points, size = 260, fill = false, zoom = 1, hei
     const projected = projectPoints(sample, yaw, pitch, radius);
     const halfW = box.width / 2;
     const halfH = box.height / 2;
-    const fit = Math.min(halfW, halfH) * 0.92 * zoom;
+    const fit = Math.min(halfW, halfH) * 0.92 * zoom * scale;
     const groups: ReturnType<typeof vec>[][] = Array.from({ length: HEIGHT_BANDS }, () => []);
-    for (const p of projected) groups[p.band].push(vec(halfW + p.x * fit, halfH - p.y * fit));
+    for (const p of projected) groups[p.band].push(vec(halfW + offset.x + p.x * fit, halfH + offset.y - p.y * fit));
     return groups;
-  }, [sample, yaw, pitch, radius, box, zoom]);
+  }, [sample, yaw, pitch, radius, box, zoom, scale, offset]);
 
   return (
     <View
@@ -98,6 +183,16 @@ export function PointCloudView({ points, size = 260, fill = false, zoom = 1, hei
           />
         ))}
       </Canvas>
+      {(onFullscreen || onClose) && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={onClose ? 'Exit full screen' : 'Full screen'}
+          onPress={onClose ?? onFullscreen}
+          style={styles.fullButton}
+        >
+          {onClose ? <Minimize2 size={18} color="#FFFFFF" /> : <Maximize2 size={18} color="#FFFFFF" />}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -105,5 +200,8 @@ export function PointCloudView({ points, size = 260, fill = false, zoom = 1, hei
 const styles = StyleSheet.create({
   fill: { alignSelf: 'stretch', flex: 1 },
   rounded: { borderRadius: 24 },
+  fullButton: { position: 'absolute', top: 12, right: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  fullBackdrop: { flex: 1, backgroundColor: '#0B1220' },
+  fullRotated: { position: 'absolute', transform: [{ rotate: '90deg' }] },
   box: { backgroundColor: '#0B1220', overflow: 'hidden' },
 });
