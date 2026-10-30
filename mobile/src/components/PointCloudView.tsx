@@ -56,6 +56,7 @@ export function PointCloudView(props: Props) {
               zoom={props.zoom}
               autoRotate={false}
               rotated
+              autoFit
               onClose={() => setFull(false)}
             />
           </View>
@@ -67,13 +68,14 @@ export function PointCloudView(props: Props) {
 
 interface CanvasProps extends Props {
   rotated?: boolean;
+  autoFit?: boolean;
   onFullscreen?: () => void;
   onClose?: () => void;
 }
 
 function CloudCanvas({
   points, size = 260, fill = false, zoom = 1, height, autoRotate = false, interactive = true,
-  rounded = false, rotated = false, onFullscreen, onClose,
+  rounded = false, rotated = false, autoFit = false, onFullscreen, onClose,
 }: CanvasProps) {
   const [box, setBox] = useState({ width: size, height: size });
   const [yaw, setYaw] = useState(autoRotate ? 0.4 : HEAD_ON_YAW);
@@ -82,6 +84,7 @@ function CloudCanvas({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const last = useRef({ x: 0, y: 0 });
+  const touched = useRef(false);
   const pinch = useRef<{ dist: number; cx: number; cy: number } | null>(null);
 
   useEffect(() => {
@@ -102,6 +105,7 @@ function CloudCanvas({
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event, g) => {
           dragging.current = true;
+          touched.current = true;
           last.current = { x: g.x0, y: g.y0 };
           pinch.current = null;
         },
@@ -149,6 +153,20 @@ function CloudCanvas({
     for (const p of sample) max = Math.max(max, Math.hypot(p[0], p[1], p[2]));
     return max;
   }, [sample]);
+
+  // Zoom so that about 95% of the points fill the view, until the user takes over.
+  useEffect(() => {
+    if (!autoFit || touched.current || sample.length === 0) return;
+    const projected = projectPoints(sample, yaw, pitch, radius);
+    const base = Math.min(box.width, box.height) / 2 * 0.92 * zoom;
+    const limits = projected
+      .map((p) => Math.min(box.width / 2 / Math.max(Math.abs(p.x) * base, 1e-6), box.height / 2 / Math.max(Math.abs(p.y) * base, 1e-6)))
+      .sort((a, b) => a - b);
+    const fitted = limits[Math.floor(limits.length * 0.05)];
+    setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, fitted)));
+    setOffset({ x: 0, y: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFit, sample, box, radius, zoom]);
 
   const bands = useMemo(() => {
     const projected = projectPoints(sample, yaw, pitch, radius);
