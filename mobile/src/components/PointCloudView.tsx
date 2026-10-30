@@ -21,8 +21,8 @@ interface Props {
   fullscreenButton?: boolean;
 }
 
-// Looking at the scene from the scanner, straight ahead.
-const HEAD_ON_YAW = 0;
+// Viewed from the scanner's own position, looking out at the scene (yaw 0 looks back at the scanner).
+const HEAD_ON_YAW = Math.PI;
 const HEAD_ON_PITCH = 0.12;
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 12;
