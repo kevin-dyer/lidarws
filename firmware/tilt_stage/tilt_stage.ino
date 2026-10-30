@@ -67,6 +67,13 @@ bool networkReady = false;
 uint8_t udpRxBuffer[MUX_MAX_DATAGRAM];
 char homeWifiSsid[33];
 char homeWifiPassword[64];
+bool staAttempting = false;
+uint32_t staAttemptStartedAt = 0;
+uint32_t staLastCheckAt = 0;
+uint32_t staForceUntil = 0;
+
+const uint32_t STA_ATTEMPT_MS = 15000;
+const uint32_t STA_RETRY_MS = 30000;
 
 uint16_t crc16Update(uint16_t crc, uint8_t value) {
   crc ^= (uint16_t)value << 8;
@@ -260,6 +267,10 @@ void processUdpFrame(const uint8_t *packet, size_t packetLength,
                  reinterpret_cast<const uint8_t *>("WIFI_OK"), 7);
     WiFi.disconnect(false, false);
     WiFi.begin(homeWifiSsid, homeWifiPassword);
+    // The phone is usually on the fallback AP while provisioning, so allow this attempt to finish.
+    staAttempting = true;
+    staAttemptStartedAt = millis();
+    staForceUntil = staAttemptStartedAt + STA_ATTEMPT_MS;
     return;
   }
   if (channel == MUX_CHANNEL_CONTROL && length == 6 &&
@@ -301,7 +312,35 @@ void processUdpPackets() {
   }
 }
 
+// Searching for a missing home network makes the single ESP32 radio hop channels, which stalls the
+// fallback access point. So stop searching while a phone is on the AP, and retry only occasionally.
+void serviceStationLink() {
+  const uint32_t now = millis();
+  if (now - staLastCheckAt < 1000) {
+    return;
+  }
+  staLastCheckAt = now;
+  if (strlen(homeWifiSsid) == 0 || WiFi.status() == WL_CONNECTED) {
+    staAttempting = false;
+    return;
+  }
+  const bool forced = (int32_t)(staForceUntil - now) > 0;
+  const bool phoneOnAp = WiFi.softAPgetStationNum() > 0;
+  if (staAttempting) {
+    if ((phoneOnAp && !forced) || now - staAttemptStartedAt > STA_ATTEMPT_MS) {
+      WiFi.disconnect(false, false);
+      staAttempting = false;
+      staAttemptStartedAt = now;
+    }
+  } else if (!phoneOnAp && now - staAttemptStartedAt > STA_RETRY_MS) {
+    WiFi.begin(homeWifiSsid, homeWifiPassword);
+    staAttempting = true;
+    staAttemptStartedAt = now;
+  }
+}
+
 void serviceLidarBridge() {
+  serviceStationLink();
   processUdpPackets();
   size_t count = 0;
   while (count < sizeof(lidarTxBuffer) && Serial1.available() > 0) {
@@ -319,7 +358,7 @@ void serviceLidarBridge() {
 bool startNetwork() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
+  WiFi.setAutoReconnect(false);
   if (!WiFi.softAP(FALLBACK_AP_SSID, FALLBACK_AP_PASSWORD)) {
     Serial.println("ERROR: could not start fallback Wi-Fi access point");
     return false;
@@ -355,6 +394,8 @@ bool startNetwork() {
   }
   if (strlen(homeWifiSsid) > 0) {
     WiFi.begin(homeWifiSsid, homeWifiPassword);
+    staAttempting = true;
+    staAttemptStartedAt = millis();
     Serial.print("Joining home Wi-Fi: ");
     Serial.println(homeWifiSsid);
   }
