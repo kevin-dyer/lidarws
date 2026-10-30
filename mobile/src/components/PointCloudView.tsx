@@ -188,9 +188,10 @@ function CloudCanvas({
           accessibilityRole="button"
           accessibilityLabel={onClose ? 'Exit full screen' : 'Full screen'}
           onPress={onClose ?? onFullscreen}
-          style={styles.fullButton}
+          style={[styles.fullButton, onClose && styles.closeButton]}
+          hitSlop={12}
         >
-          {onClose ? <Minimize2 size={18} color="#FFFFFF" /> : <Maximize2 size={18} color="#FFFFFF" />}
+          {onClose ? <Minimize2 size={22} color="#FFFFFF" /> : <Maximize2 size={18} color="#FFFFFF" />}
         </Pressable>
       )}
     </View>
@@ -201,6 +202,7 @@ const styles = StyleSheet.create({
   fill: { alignSelf: 'stretch', flex: 1 },
   rounded: { borderRadius: 24 },
   fullButton: { position: 'absolute', top: 12, right: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  closeButton: { top: 16, right: undefined, left: 64, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.3)' },
   fullBackdrop: { flex: 1, backgroundColor: '#0B1220' },
   fullRotated: { position: 'absolute', transform: [{ rotate: '90deg' }] },
   box: { backgroundColor: '#0B1220', overflow: 'hidden' },
