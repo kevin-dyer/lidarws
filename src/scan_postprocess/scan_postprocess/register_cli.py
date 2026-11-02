@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('-o', '--output', default='registered.ply', help='output .ply (default: registered.ply)')
     parser.add_argument('--voxel', type=float, help='alignment resolution in metres (default: from scene size)')
     parser.add_argument('--merge-voxel', type=float, help='also thin the combined cloud to this voxel size (m)')
+    parser.add_argument('--no-ground', action='store_true', help='skip ground levelling (for scenes with no visible ground)')
     parser.add_argument('--min-overlap', type=float, default=0.20,
                         help='minimum overlap fraction for an accepted alignment (default 0.20)')
     parser.add_argument('--frame', choices=sorted(FRAMES), default='frd',
@@ -51,13 +52,17 @@ def main(argv=None) -> int:
                 print(f'warning: {error} Continuing without RViz.', file=sys.stderr)
 
         clouds = [read_cloud(path) for path in args.plys]
-        params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap)
+        params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap,
+                                  use_ground=not args.no_ground)
         observer = None
         if args.debug and viewer:
             def observer(stage, items):
                 viewer.show_alignment(stage, items, args.debug_delay)
 
         result = register_clouds(clouds, params, observer)
+        for k in result.excluded:
+            print(f'warning: cloud {k + 1} could not be aligned (too little shared structure); left out.',
+                  file=sys.stderr)
         combined = voxel_merge(result.cloud, args.merge_voxel) if args.merge_voxel else result.cloud
         write_cloud(args.output, combined, ascii_format=args.ascii)
 

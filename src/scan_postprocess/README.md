@@ -20,6 +20,17 @@ Per added cloud: FPFH+RANSAC global alignment, then multi-scale point-to-plane I
 so far. Exits with code 2 and an error message if alignment is not reliable. The result opens in RViz;
 `--debug` shows every stage live, one colour per scan. `--no-view` skips RViz.
 
+### Outdoor / ground-dominated scenes
+
+When every scan sees the ground, registration first levels each scan on its ground plane, then matches scans on the
+structure standing above it (stumps, walls, stairs, trees). This matters outdoors, where the flat ground and long
+walls otherwise let one scan slide over another and still score well. All scan pairs are matched with several
+candidate alignments each; scans are then placed one at a time, each judged against everything already placed, and
+finally every pose is refined against the rest. A scan that agrees too little with the others (`overlap` below 25%)
+is left out with a warning rather than smearing the result. Pass `--no-ground` to `register_scans` /
+`process_group` to use the general 6-DOF method (for scenes with no visible ground). Tips for outdoor groups:
+scan the same landmarks (a post, a wall corner, steps) from every position, and keep the scanner roughly level.
+
 ## Shared scan folder (colour + register in one step)
 `process_group` first estimates each photo's camera pose from photo features: SIFT matches between the
 photos of overlapping scans give the relative camera geometry; together with the registered scan baseline

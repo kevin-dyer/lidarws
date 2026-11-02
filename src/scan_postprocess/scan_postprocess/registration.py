@@ -15,6 +15,7 @@ import open3d as o3d
 from scipy import ndimage, signal
 from scipy.spatial import cKDTree
 
+from . import ground_registration as ground
 from .ply_io import Cloud
 
 reg = o3d.pipelines.registration
@@ -37,6 +38,8 @@ class RegistrationParams:
     ransac_confidence: float = 0.9999
     icp_chunk: int = 2  # ICP iterations between observer updates
     seed: int = 0
+    use_ground: bool = True  # level scans on the ground and match structure first (outdoor scenes)
+    min_structure_score: float = 0.25  # a scan agreeing less than this with the others is left out
 
 
 @dataclass
@@ -54,6 +57,8 @@ class RegistrationResult:
     transformations: List[np.ndarray]
     pairs: List[PairResult] = field(default_factory=list)
     source_index: Optional[np.ndarray] = None  # which input cloud each output point came from
+    excluded: List[int] = field(default_factory=list)  # input clouds that could not be aligned and were left out
+    included: Optional[List[int]] = None  # input indices of the aligned clouds (None = all, in order)
 
 
 def _to_pcd(points: np.ndarray) -> o3d.geometry.PointCloud:
@@ -276,6 +281,49 @@ def voxel_merge(cloud: Cloud, voxel: float) -> Cloud:
     return Cloud(np.asarray(out.points), colors)
 
 
+def _register_on_ground(
+    clouds: Sequence[Cloud],
+    params: RegistrationParams,
+    observer: Optional[Observer] = None,
+) -> Optional[RegistrationResult]:
+    """Ground-levelled registration; None when the scans have no usable ground or too few could be aligned."""
+    try:
+        scans = [ground.level_scan(c.points, params.seed) for c in clouds]
+    except ground.NoGroundError:
+        return None
+    count = len(clouds)
+    hypotheses = {}
+    for i in range(count):
+        for j in range(i + 1, count):
+            found = ground.register_pair(scans[j], scans[i], i, j)
+            if found:
+                hypotheses[(i, j)] = found
+    poses, scores, _ = ground.build_poses(scans, hypotheses, params.min_structure_score)
+    included = sorted(poses)
+    if len(included) < 2:
+        return None
+    excluded = [k for k in range(count) if k not in poses]
+
+    first = included[0]
+    to_first = np.linalg.inv(poses[first] @ scans[first].level)
+    transforms = [to_first @ poses[k] @ scans[k].level for k in included]
+    kept = [clouds[k] for k in included]
+    pairs = []
+    for n, k in enumerate(included):
+        if n > 0:
+            rms = ground._match(scans[k].structure, ground._merged(scans, poses, skip=k), poses[k])[2]
+            pairs.append(PairResult(k, transforms[n], float(scores[k]), float(scores[k]), float(rms)))
+    if observer:
+        observer('aligned', [(n, _transform(c.points[::20], t)) for n, (c, t) in enumerate(zip(kept, transforms))])
+    points = np.vstack([_transform(c.points, t) for c, t in zip(kept, transforms)])
+    colors = None
+    if any(c.colors is not None for c in kept):
+        gray = np.full((1, 3), 128, dtype=np.uint8)
+        colors = np.vstack([c.colors if c.colors is not None else np.tile(gray, (len(c), 1)) for c in kept])
+    source_index = np.concatenate([np.full(len(c), n) for n, c in enumerate(kept)])
+    return RegistrationResult(Cloud(points, colors), transforms, pairs, source_index, excluded, included)
+
+
 def register_clouds(
     clouds: Sequence[Cloud],
     params: Optional[RegistrationParams] = None,
@@ -287,6 +335,10 @@ def register_clouds(
     only at a suitable scale; the error from the last attempt is raised if none succeeds.
     """
     params = params or RegistrationParams()
+    if params.use_ground and len(clouds) >= 2:
+        grounded = _register_on_ground(clouds, params, observer)
+        if grounded is not None:
+            return grounded
     if params.voxel:
         return _register_once(clouds, params, observer)
     base = auto_voxel(clouds)

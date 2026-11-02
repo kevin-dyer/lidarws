@@ -112,3 +112,50 @@ def test_blend_colours_points_seen_by_two_photos():
     assert res.confident.any()
     assert (res.colors[res.confident] == 200).all()
     assert res.views.max() == 2
+
+
+def make_outdoor(seed=0):
+    """Ground, a long wall and a few posts/boxes: the wall alone would let scans slide along it."""
+    rng = np.random.default_rng(seed)
+    ground = np.c_[rng.uniform(-10, 10, (30000, 2)), rng.normal(0, 0.01, 30000)]
+    wall = np.c_[rng.uniform(-10, 10, 12000), np.full(12000, 6.0), rng.uniform(0, 2.5, 12000)]
+    parts = [ground, wall]
+    for cx, cy, w, h in ((0, 2, 0.5, 1.5), (3, -2, 0.8, 1.0), (-4, 3, 0.4, 2.0), (5, 3, 1.0, 0.7), (-2, -3, 0.6, 1.2)):
+        for _ in range(3):
+            face = rng.uniform(-w, w, (700, 3)) * [1, 1, 0] + [cx, cy, 0]
+            face[:, 2] = rng.uniform(0, h, 700)
+            side = rng.integers(0, 2, 700)
+            face[:, side[0]] = np.where(rng.random(700) < 0.5, 1, -1) * w + [cx, cy][side[0]]
+            parts.append(face)
+    return np.vstack(parts)
+
+
+def scan_from(scene, yaw, position, radius=9.0):
+    """Scene as a scanner 1 m above the ground at `position` facing `yaw` would record it (noisy, limited range)."""
+    pose = rigid(yaw, [position[0], position[1], 1.0])
+    local = (scene - pose[:3, 3]) @ pose[:3, :3]
+    local = local[np.linalg.norm(local, axis=1) < radius]
+    return local + np.random.default_rng(3).normal(0, 0.01, local.shape), pose
+
+
+def test_ground_registration_outdoor():
+    scene = make_outdoor()
+    scans = [scan_from(scene, 0.2, (-3, -4)), scan_from(scene, 0.9, (2, -5)), scan_from(scene, 1.5, (-6, 0))]
+    result = register_clouds([Cloud(p) for p, _ in scans], RegistrationParams(voxel=0.1))
+    assert result.excluded == []
+    # Relative poses between scans must match the true ones (planar error well under the wall slide ambiguity).
+    for k in (1, 2):
+        truth = np.linalg.inv(scans[0][1]) @ scans[k][1]
+        error = np.linalg.inv(result.transformations[k]) @ truth
+        assert np.hypot(error[0, 3], error[1, 3]) < 0.15
+        assert abs(np.arctan2(error[1, 0], error[0, 0])) < np.radians(2)
+
+
+def test_ground_registration_leaves_out_unrelated_scan():
+    scene = make_outdoor()
+    rng = np.random.default_rng(5)
+    stray = np.c_[rng.uniform(-10, 10, (20000, 2)), rng.normal(0, 0.01, 20000)] - [0, 0, 1.0]
+    stray = np.vstack([stray, rng.normal(size=(500, 3)) * [3, 3, 0.3] + [0, 0, 0.4]])
+    scans = [scan_from(scene, 0.2, (-3, -4)), scan_from(scene, 0.9, (2, -5))]
+    result = register_clouds([Cloud(scans[0][0]), Cloud(stray), Cloud(scans[1][0])], RegistrationParams(voxel=0.1))
+    assert result.included == [0, 2] and result.excluded == [1]

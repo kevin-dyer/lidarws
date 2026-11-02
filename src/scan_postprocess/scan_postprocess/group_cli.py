@@ -104,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--frame', choices=sorted(FRAMES), default='frd')
     p.add_argument('--voxel', type=float, help='registration resolution in metres')
     p.add_argument('--merge-voxel', type=float, help='thin the combined cloud to this voxel size (m)')
+    p.add_argument('--no-ground', action='store_true', help='skip ground levelling (no visible ground)')
     p.add_argument('--min-overlap', type=float, default=0.20)
     p.add_argument('--no-mesh', action='store_true', help='skip surface reconstruction')
     p.add_argument('--mesh-depth', type=int, default=9, help='Poisson octree depth; higher = more detail (default 9)')
@@ -150,17 +151,27 @@ def main(argv=None) -> int:
             def observer(stage, items):
                 viewer.show_alignment(stage, items, args.debug_delay)
 
-        params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap)
+        params = RegistrationParams(voxel=args.voxel, min_fine_fitness=args.min_overlap,
+                              use_ground=not args.no_ground)
         result = register_clouds(plain, params, observer)
+        if result.excluded:
+            left_out = ', '.join(names[k] for k in result.excluded)
+            print(f'warning: could not align {left_out}; it is left out (too little shared structure with the '
+                  'other scans).', file=sys.stderr)
+            keep = result.included
+            plain = [plain[k] for k in keep]
+            images = [images[k] for k in keep]
+            names = [names[k] for k in keep]
         transforms = [np.asarray(t) for t in result.transformations]
         cameras = calibrate_cameras(plain, images, names, transforms, args)
         if any(im is not None for im in images):
             blended = blend_colors(result.cloud.points, result.source_index, images, cameras, transforms,
                                    frame=args.frame, hfov_deg=args.hfov)
             result.cloud = Cloud(result.cloud.points, blended.colors)
-            print(f'blended colour: {blended.stats["colored"]}/{blended.stats["points"]} points coloured, '
-                  f'{blended.stats["multi_view"]} seen by several photos '
-                  f'(mean disagreement {blended.disagreement:.0f}/255)')
+            if blended.stats:
+                print(f'blended colour: {blended.stats["colored"]}/{blended.stats["points"]} points coloured, '
+                      f'{blended.stats["multi_view"]} seen by several photos '
+                      f'(mean disagreement {blended.disagreement:.0f}/255)')
             for i, name in enumerate(names):
                 mine = np.asarray(result.source_index) == i
                 write_cloud(os.path.join(out_dir, f'{name}_colored.ply'),
