@@ -26,6 +26,9 @@ const HEAD_ON_YAW = Math.PI;
 const HEAD_ON_PITCH = 0.12;
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 12;
+const AUTO_SWAY_AMPLITUDE_RAD = (5 * Math.PI) / 180;
+const AUTO_SWAY_PERIOD_MS = 7000;
+const AUTO_SWAY_RESUME_IDLE_MS = 1200;
 
 const touchesOf = (event: GestureResponderEvent) => {
   const touches = event.nativeEvent.touches;
@@ -86,12 +89,26 @@ function CloudCanvas({
   const last = useRef({ x: 0, y: 0 });
   const touched = useRef(false);
   const pinch = useRef<{ dist: number; cx: number; cy: number } | null>(null);
+  const yawNow = useRef(autoRotate ? 0.4 : HEAD_ON_YAW);
+  const swayCenterYaw = useRef(autoRotate ? 0.4 : HEAD_ON_YAW);
+  const swayPhase = useRef(0);
+  const swayResumeAt = useRef(0);
+
+  useEffect(() => {
+    yawNow.current = yaw;
+  }, [yaw]);
 
   useEffect(() => {
     if (!autoRotate) return undefined;
+    let lastTick = Date.now();
     const timer = setInterval(() => {
-      if (!dragging.current) setYaw((value) => value + 0.03);
-    }, 100);
+      const now = Date.now();
+      const deltaMs = now - lastTick;
+      lastTick = now;
+      if (dragging.current || now < swayResumeAt.current) return;
+      swayPhase.current += (deltaMs / AUTO_SWAY_PERIOD_MS) * Math.PI * 2;
+      setYaw(swayCenterYaw.current + AUTO_SWAY_AMPLITUDE_RAD * Math.sin(swayPhase.current));
+    }, 33);
     return () => clearInterval(timer);
   }, [autoRotate]);
 
@@ -124,7 +141,7 @@ function CloudCanvas({
             return;
           }
           if (pinch.current) {
-            // Back to one finger: restart the orbit from the current position.
+            // Back to one finger: continue rotating from the current position.
             pinch.current = null;
             last.current = { x: g.moveX, y: g.moveY };
             return;
@@ -137,14 +154,24 @@ function CloudCanvas({
         onPanResponderRelease: () => {
           dragging.current = false;
           pinch.current = null;
+          if (autoRotate) {
+            swayCenterYaw.current = yawNow.current;
+            swayPhase.current = 0;
+            swayResumeAt.current = Date.now() + AUTO_SWAY_RESUME_IDLE_MS;
+          }
         },
         onPanResponderTerminate: () => {
           dragging.current = false;
           pinch.current = null;
+          if (autoRotate) {
+            swayCenterYaw.current = yawNow.current;
+            swayPhase.current = 0;
+            swayResumeAt.current = Date.now() + AUTO_SWAY_RESUME_IDLE_MS;
+          }
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rotated],
+    [rotated, autoRotate],
   );
 
   const sample = useMemo(() => decimate(points, MAX_DISPLAY_POINTS), [points]);

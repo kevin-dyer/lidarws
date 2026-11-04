@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'colorize_scan = scan_postprocess.colorize_cli:main',
             'register_scans = scan_postprocess.register_cli:main',
+            'mesh_scan = scan_postprocess.mesh_cli:main',
             'process_group = scan_postprocess.group_cli:main',
         ],
     },

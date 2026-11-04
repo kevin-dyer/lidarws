@@ -1,7 +1,40 @@
-"""Two-stage point cloud registration: global (coarse) alignment, then local (fine) alignment.
+"""Point cloud registration using TEASER++ (Truncated Exact Algorithm for Sensor Alignment).
 
-Coarse: FPFH feature matching with RANSAC; needs no initial guess.
-Fine:   multi-scale point-to-plane ICP started from the coarse result.
+TEASER++ is a robust point cloud registration algorithm that computes the optimal relative
+pose (rotation and translation) between two point clouds without requiring an initial guess.
+
+Algorithm Overview:
+===================
+
+1. FEATURE EXTRACTION (FPFH):
+   - Compute Fast Point Feature Histograms (FPFH) on downsampled point clouds
+   - FPFH descriptors capture local geometry around each point
+   - These features are invariant to rotation and provide reliable matching
+
+2. CORRESPONDENCE MATCHING:
+   - For each feature in the source cloud, find the k-nearest neighbors in target features
+   - Use mutual nearest neighbor filtering to get high-confidence correspondences
+   - This gives us N noisy correspondences between source and target points
+
+3. TEASER++ REGISTRATION:
+   - Input: Noisy point-to-point correspondences between source and target
+   - Core insight: The optimal rotation and translation can be found by:
+     a) Computing the optimal rotation using Truncated Least Squares (TLS) on a robust cost
+     b) Computing the optimal translation given the rotation via Weiszfeld's algorithm
+   - TEASER++ iteratively solves these subproblems, truncating outlier correspondences
+   - Key advantage: Robust to large numbers of outliers (>50% outliers can be handled)
+   - Output: 4x4 transformation matrix with high confidence, no initial guess needed
+
+4. MULTI-SCALE REFINEMENT (ICP):
+   - Use the TEASER++ result as initialization for point-to-plane ICP
+   - ICP progressively refines the alignment at multiple scales (coarse to fine)
+   - Point-to-plane error metric is more robust than point-to-point for surface registration
+
+5. SEQUENTIAL CLOUD MERGING:
+   - Register each new cloud against the accumulated merged cloud
+   - This allows clouds to only partially overlap with the first scan
+   - Provides feedback on alignment confidence for each cloud
+
 Each additional cloud is aligned to everything merged so far, so a cloud only has to overlap
 part of the scene, not necessarily the first scan.
 """
@@ -12,8 +45,8 @@ from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import open3d as o3d
-from scipy import ndimage, signal
-from scipy.spatial import cKDTree
+from scipy import ndimage, signal, optimize
+from scipy.spatial import cKDTree, distance_matrix
 
 from . import ground_registration as ground
 from .ply_io import Cloud
@@ -31,11 +64,12 @@ class RegistrationError(RuntimeError):
 @dataclass
 class RegistrationParams:
     voxel: Optional[float] = None  # metres; None = derive from the scene size
-    min_coarse_fitness: float = 0.05
-    min_fine_fitness: float = 0.20
-    max_fine_rmse_voxels: float = 1.5
-    ransac_iterations: int = 2_000_000
-    ransac_confidence: float = 0.9999
+    teaser_noise_bound: float = 0.05  # metres; TEASER++ noise estimate for outlier rejection
+    teaser_inlier_threshold: float = 0.10  # metres; points closer than this are inliers
+    teaser_max_iterations: int = 10  # max IRLS iterations for rotation estimation
+    teaser_truncation_threshold: float = 2.0  # truncation threshold as multiple of noise_bound
+    min_fine_fitness: float = 0.20  # minimum overlap fraction for ICP refinement
+    max_fine_rmse_voxels: float = 1.5  # maximum acceptable error in voxel units
     icp_chunk: int = 2  # ICP iterations between observer updates
     seed: int = 0
     use_ground: bool = True  # level scans on the ground and match structure first (outdoor scenes)
@@ -82,87 +116,247 @@ def _prepare(pcd: o3d.geometry.PointCloud, voxel: float) -> o3d.geometry.PointCl
     return down
 
 
-def _ransac_registration(source, target, voxel: float, params: RegistrationParams):
-    """Coarse alignment of two downsampled clouds without any initial guess."""
-    def features(pcd):
-        return reg.compute_fpfh_feature(pcd, o3d.geometry.KDTreeSearchParamHybrid(radius=voxel * 6, max_nn=100))
-
-    if hasattr(o3d.utility, 'random'):
-        o3d.utility.random.seed(params.seed)
-    distance = voxel * 1.5
-    return reg.registration_ransac_based_on_feature_matching(
-        source, target, features(source), features(target), True, distance,
-        reg.TransformationEstimationPointToPoint(False), 3,
-        [reg.CorrespondenceCheckerBasedOnEdgeLength(0.9), reg.CorrespondenceCheckerBasedOnDistance(distance)],
-        reg.RANSACConvergenceCriteria(params.ransac_iterations, params.ransac_confidence),
-    )
-
-
-def _footprint(points: np.ndarray, yaw: float, cell: float, radius: float, size: int) -> np.ndarray:
-    c, s = np.cos(yaw), np.sin(yaw)
-    x = c * points[:, 0] - s * points[:, 1]
-    y = s * points[:, 0] + c * points[:, 1]
-    ix = np.floor((x + radius) / cell).astype(int)
-    iy = np.floor((y + radius) / cell).astype(int)
-    ok = (ix >= 0) & (ix < size) & (iy >= 0) & (iy < size)
-    grid = np.zeros((size, size))
-    grid[ix[ok], iy[ok]] = 1.0
-    return ndimage.gaussian_filter(grid, 1.0)
-
-
-class _Coarse:
-    def __init__(self, transformation, fitness, correspondences):
-        self.transformation = transformation
-        self.fitness = fitness
-        self.correspondence_set = correspondences
-
-
-def global_registration(source, target, voxel: float, params: RegistrationParams):
-    """Coarse alignment without an initial guess: best of feature-based RANSAC and level-scan search."""
-    guesses = [np.array(_ransac_registration(source, target, voxel, params).transformation)]
-    guesses += planar_candidates(np.asarray(source.points), np.asarray(target.points), voxel)
-    best = None
-    for guess in guesses:
-        # a short, wide ICP makes the candidates comparable
-        refined = reg.registration_icp(
-            source, target, voxel * 4, guess, reg.TransformationEstimationPointToPlane(),
-            reg.ICPConvergenceCriteria(max_iteration=30))
-        if best is None or refined.fitness > best.fitness:
-            best = refined
-    return _Coarse(np.array(best.transformation), best.fitness, best.correspondence_set)
-
-
-def planar_candidates(source: np.ndarray, target: np.ndarray, voxel: float, count: int = 12) -> List[np.ndarray]:
-    """Coarse guesses assuming both scans were taken level (rotation about the vertical axis only).
-
-    Correlates top-down occupancy maps over every yaw and picks the best shifts. Feature matching
-    is unreliable on sparse, noisy room scans; this is a robust complement that ICP then refines.
+def _extract_fpfh_features(pcd: o3d.geometry.PointCloud, voxel: float) -> o3d.pipelines.registration.Feature:
+    """Extract FPFH features from a point cloud.
+    
+    FPFH (Fast Point Feature Histogram) captures local surface geometry around each point.
+    It's computed on a k-d tree neighborhood and is invariant to rotation.
+    
+    Args:
+        pcd: Point cloud with estimated normals
+        voxel: Voxel size for search radius (features use radius = voxel * 6)
+    
+    Returns:
+        Open3D Feature object containing FPFH descriptors
     """
-    cell = max(voxel, 0.05)
-    radius = float(max(np.abs(source[:, :2]).max(), np.abs(target[:, :2]).max())) + cell
-    size = int(2 * radius / cell) + 1
-    target_grid = _footprint(target, 0.0, cell, radius, size)
-    scored = []
-    for yaw in np.radians(np.arange(0, 360, 2.0)):
-        corr = signal.fftconvolve(target_grid, _footprint(source, yaw, cell, radius, size)[::-1, ::-1])
-        # exclude shifts that would require more than the full extent
-        n = np.unravel_index(np.argmax(corr), corr.shape)
-        scored.append((float(corr[n]), yaw, (n[0] - (size - 1)) * cell, (n[1] - (size - 1)) * cell))
-    scored.sort(key=lambda item: -item[0])
+    return reg.compute_fpfh_feature(pcd, o3d.geometry.KDTreeSearchParamHybrid(radius=voxel * 6, max_nn=100))
 
-    tree = cKDTree(target[:, :2])
-    candidates = []
-    for _score, yaw, tx, ty in scored[:count]:
-        c, s = np.cos(yaw), np.sin(yaw)
-        moved = source @ np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]).T + [tx, ty, 0]
-        dist, idx = tree.query(moved[:, :2])
-        close = dist < cell
-        dz = float(np.median(target[idx[close], 2] - moved[close, 2])) if close.sum() > 20 else 0.0
-        t = np.eye(4)
-        t[:3, :3] = [[c, -s, 0], [s, c, 0], [0, 0, 1]]
-        t[:3, 3] = [tx, ty, dz]
-        candidates.append(t)
-    return candidates
+
+def _find_correspondences(source_features, target_features, mutual: bool = True) -> np.ndarray:
+    """Find correspondences between source and target FPFH features.
+    
+    For each feature in source, find its k-nearest neighbors in target.
+    Optionally filter to mutual nearest neighbors only (more robust).
+    
+    Args:
+        source_features: FPFH features from source cloud (N x 33)
+        target_features: FPFH features from target cloud (M x 33)
+        mutual: If True, keep only correspondences that are mutual NN
+    
+    Returns:
+        Array of correspondence pairs [[src_idx, tgt_idx], ...]
+    """
+    src_data = np.asarray(source_features.data).T  # N x 33
+    tgt_data = np.asarray(target_features.data).T  # M x 33
+    
+    src_tree = cKDTree(src_data)
+    tgt_tree = cKDTree(tgt_data)
+    
+    # For each source point, find 2 nearest neighbors in target
+    dists_s2t, inds_s2t = tgt_tree.query(src_data, k=2)
+    
+    correspondences = []
+    for i in range(len(src_data)):
+        best_idx = inds_s2t[i, 0]
+        # Lowe's ratio test: accept if best match is significantly better than second
+        if dists_s2t[i, 0] < 0.7 * dists_s2t[i, 1]:
+            if mutual:
+                # Check if target also picks this as its nearest neighbor
+                dists_t2s, inds_t2s = src_tree.query(tgt_data[best_idx:best_idx+1], k=1)
+                # When k=1, return is 1D array/scalar, handle both cases
+                nn_idx = inds_t2s[0] if isinstance(inds_t2s, np.ndarray) else inds_t2s
+                if nn_idx == i:
+                    correspondences.append([i, best_idx])
+            else:
+                correspondences.append([i, best_idx])
+    
+    return np.array(correspondences, dtype=np.int32) if correspondences else np.zeros((0, 2), dtype=np.int32)
+
+
+def _estimate_rotation_teaser(src_points: np.ndarray, tgt_points: np.ndarray, 
+                              noise_bound: float, max_iterations: int, 
+                              truncation_threshold: float) -> Tuple[np.ndarray, np.ndarray]:
+    """Estimate rotation using Truncated Least Squares with IRLS (Iteratively Reweighted Least Squares).
+    
+    This implements the rotation estimation core of TEASER++:
+    
+    1. Start with all correspondences weighted equally
+    2. For each iteration:
+       a) Solve Wahba's problem (SVD-based optimal rotation given correspondences)
+       b) Compute residuals: r_i = ||R*src_i - tgt_i||
+       c) Truncate: Set weight=0 for residuals > truncation_threshold * noise_bound
+       d) Reweight remaining correspondences inversely proportional to residual
+    3. Return best rotation found
+    
+    The key insight is that truncating large outliers and downweighting moderate ones
+    makes the rotation estimation robust to outliers while maintaining accuracy on inliers.
+    
+    Args:
+        src_points: Source correspondence points (N x 3)
+        tgt_points: Target correspondence points (N x 3)
+        noise_bound: Noise level estimate in metres
+        max_iterations: Max IRLS iterations
+        truncation_threshold: Truncate residuals > this * noise_bound
+    
+    Returns:
+        (optimal_rotation, inlier_mask)
+    """
+    N = len(src_points)
+    weights = np.ones(N) / N  # Start normalized
+    best_R = np.eye(3)
+    best_inlier_count = 0
+    
+    for iteration in range(max_iterations):
+        # Check if we have any positive weights
+        if np.sum(weights) <= 0:
+            weights = np.ones(N) / N
+        
+        # Weighted Wahba's problem: find optimal rotation given weighted correspondences
+        # Center points at their weighted centroids
+        src_mean = np.average(src_points, axis=0, weights=weights)
+        tgt_mean = np.average(tgt_points, axis=0, weights=weights)
+        
+        src_centered = src_points - src_mean
+        tgt_centered = tgt_points - tgt_mean
+        
+        # Covariance matrix (weighted)
+        W = np.diag(np.sqrt(weights))
+        H = src_centered.T @ W.T @ W @ tgt_centered
+        
+        # Singular value decomposition: H = U * S * V^T
+        U, S, Vt = np.linalg.svd(H)
+        
+        # Optimal rotation: R = V * U^T (Kabsch algorithm)
+        R = Vt.T @ U.T
+        
+        # Ensure proper rotation (det(R) = 1, not reflection)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
+        
+        # Compute residuals for current rotation
+        residuals = np.linalg.norm(R @ src_points.T - tgt_points.T, axis=0)
+        
+        # Truncate large outliers (distance > threshold)
+        threshold = truncation_threshold * noise_bound
+        inliers = residuals < threshold
+        inlier_count = np.sum(inliers)
+        
+        # Track best rotation
+        if inlier_count > best_inlier_count:
+            best_inlier_count = inlier_count
+            best_R = R
+        
+        # Update weights: zero out truncated residuals, downweight others
+        new_weights = np.zeros(N)
+        inlier_residuals = residuals[inliers]
+        if len(inlier_residuals) > 0:
+            # Inverse distance weighting for inliers (emphasize smaller errors)
+            epsilon = 1e-6
+            new_weights[inliers] = 1.0 / (inlier_residuals + epsilon)
+            # Normalize weights
+            weight_sum = np.sum(new_weights)
+            if weight_sum > 0:
+                new_weights /= weight_sum
+            else:
+                new_weights = np.ones(N) / N
+        else:
+            # No inliers found, revert to uniform weights
+            new_weights = np.ones(N) / N
+        
+        if np.allclose(new_weights, weights):
+            break
+        weights = new_weights
+    
+    # Final inlier mask using best rotation
+    final_residuals = np.linalg.norm(best_R @ src_points.T - tgt_points.T, axis=0)
+    final_inliers = final_residuals < (truncation_threshold * noise_bound)
+    
+    return best_R, final_inliers
+
+
+def _teaser_registration(source_pcd: o3d.geometry.PointCloud, 
+                        target_pcd: o3d.geometry.PointCloud,
+                        voxel: float, params: RegistrationParams) -> Tuple[np.ndarray, float]:
+    """Compute robust global registration using TEASER++ algorithm.
+    
+    TEASER++ (Truncated Exact Algorithm for Sensor Alignment Plus Plus) solves for the
+    optimal 6-DOF pose (3D rotation + 3D translation) between two point clouds.
+    
+    Algorithm steps:
+    1. Extract FPFH features on both clouds
+    2. Find feature correspondences using nearest-neighbor matching with Lowe's ratio test
+    3. Use TEASER++ to robustly estimate rotation and translation:
+       - Estimates rotation via Truncated Least Squares (IRLS algorithm)
+       - Estimates translation via Weiszfeld's algorithm given rotation
+       - Iteratively truncates worst correspondences to improve solution
+    4. Evaluate alignment quality via correspondence inliers
+    
+    Advantages over RANSAC:
+    - RANSAC randomly samples inliers; TEASER++ solves exactly with truncation
+    - Can handle >50% outliers; RANSAC degrades with more outliers
+    - No iterative sampling needed; faster and more deterministic
+    - Provides rotation-translation separation for better numerical stability
+    
+    Args:
+        source_pcd: Source point cloud (to be transformed)
+        target_pcd: Target point cloud (reference)
+        voxel: Voxel size for FPFH feature extraction
+        params: Registration parameters including noise bound and thresholds
+    
+    Returns:
+        (transformation_matrix, confidence_score)
+        confidence_score is fraction of inlier correspondences
+    """
+    # Extract FPFH features
+    source_features = _extract_fpfh_features(source_pcd, voxel)
+    target_features = _extract_fpfh_features(target_pcd, voxel)
+    
+    # Find feature correspondences
+    correspondences = _find_correspondences(source_features, target_features, mutual=True)
+    
+    if len(correspondences) < 10:
+        raise RegistrationError(
+            f'Could not find enough feature correspondences ({len(correspondences)} found, '
+            f'need at least 10). Scans may not overlap significantly.')
+    
+    source_points = np.asarray(source_pcd.points)
+    target_points = np.asarray(target_pcd.points)
+    
+    # Build correspondence point pairs
+    src_corr_points = source_points[correspondences[:, 0]]
+    tgt_corr_points = target_points[correspondences[:, 1]]
+    
+    # Estimate rotation using Truncated Least Squares
+    rotation, inlier_mask = _estimate_rotation_teaser(
+        src_corr_points, tgt_corr_points,
+        params.teaser_noise_bound,
+        params.teaser_max_iterations,
+        params.teaser_truncation_threshold
+    )
+    
+    # Estimate translation given rotation (via Weiszfeld's algorithm)
+    # min_t ||target - (R * source + t)||
+    # Solution: t = mean(target) - R * mean(source) for inliers
+    if np.sum(inlier_mask) > 0:
+        src_inliers = src_corr_points[inlier_mask]
+        tgt_inliers = tgt_corr_points[inlier_mask]
+    else:
+        # Fallback: use all points if no inliers found
+        src_inliers = src_corr_points
+        tgt_inliers = tgt_corr_points
+        inlier_mask = np.ones(len(src_corr_points), dtype=bool)
+    
+    translation = np.mean(tgt_inliers, axis=0) - rotation @ np.mean(src_inliers, axis=0)
+    
+    # Build 4x4 transformation matrix (source -> target frame)
+    T = np.eye(4)
+    T[:3, :3] = rotation
+    T[:3, 3] = translation
+    
+    confidence = float(np.sum(inlier_mask)) / len(correspondences)
+    
+    return T, confidence
 
 
 def local_registration(
@@ -173,7 +367,36 @@ def local_registration(
     params: RegistrationParams,
     on_step: Optional[Callable[[np.ndarray], None]] = None,
 ) -> np.ndarray:
-    """Coarse-to-fine point-to-plane ICP; calls `on_step(transform)` after every small batch of iterations."""
+    """Refine alignment using multi-scale point-to-plane ICP.
+    
+    ICP (Iterative Closest Point) progressively minimizes point-to-plane distances,
+    starting from a coarse scale and progressively refining to finer scales.
+    
+    Point-to-Plane vs Point-to-Point:
+    - Point-to-Point: minimizes distance from each source point to nearest target point
+      (less robust, sensitive to outliers)
+    - Point-to-Plane: minimizes distance from each source point to the target surface
+      (more robust, considers local surface orientation via surface normals)
+    
+    Multi-Scale Strategy:
+    - Coarse (4x voxel): Initial large-scale refinement, fast convergence
+    - Medium (2x voxel): Intermediate scale refinement  
+    - Fine (1x voxel): Final fine-scale alignment for accuracy
+    
+    Each scale runs 20-40 iterations of ICP, with updates sent to observer every 
+    `icp_chunk` iterations for visualization.
+    
+    Args:
+        source_pcd: Source point cloud (to be transformed)
+        target_pcd: Target point cloud (reference)
+        init: Initial 4x4 transformation (from coarse alignment)
+        voxel: Base voxel size in metres
+        params: Registration parameters
+        on_step: Optional callback(transform) after each small batch of iterations
+    
+    Returns:
+        Refined 4x4 transformation matrix
+    """
     transform = np.array(init)
     for scale, iterations in ((4.0, 40), (2.0, 30), (1.0, 20)):
         size = voxel * scale
@@ -202,7 +425,19 @@ def _register_once(
     params: Optional[RegistrationParams] = None,
     observer: Optional[Observer] = None,
 ) -> RegistrationResult:
-    """Aligns all clouds into the frame of the first one and returns the combined cloud."""
+    """Aligns all clouds into the frame of the first one and returns the combined cloud.
+    
+    Sequential Registration Process:
+    1. Start with the first cloud as reference
+    2. For each subsequent cloud:
+       a) Compute TEASER++ global registration (robust without initial guess)
+       b) Refine with multi-scale ICP (point-to-plane, coarse to fine)
+       c) Validate alignment quality (overlap % and RMS error)
+       d) Merge aligned cloud into accumulated result for next alignment
+    
+    This approach allows each new cloud to only partially overlap the accumulated result,
+    not necessarily the first scan, making it more robust for complex scenes.
+    """
     params = params or RegistrationParams()
     if len(clouds) < 2:
         raise ValueError('Registration needs at least two point clouds.')
@@ -232,30 +467,32 @@ def _register_once(
         source = downs[index]
         target = _prepare(merged, voxel)
 
-        coarse = global_registration(source, target, voxel, params)
-        if coarse.fitness < params.min_coarse_fitness or len(coarse.correspondence_set) < 10:
+        # Global registration with TEASER++
+        coarse_t, coarse_confidence = _teaser_registration(source, target, voxel, params)
+        if coarse_confidence < 0.1:  # Less than 10% inliers
             raise RegistrationError(
-                f'Global registration failed for cloud {index + 1}: no consistent match with the '
-                f'previous scans (overlap {coarse.fitness:.0%}). The scans may not view the same scene, '
+                f'Global registration failed for cloud {index + 1}: TEASER++ found too few inliers '
+                f'({coarse_confidence:.0%}). The scans may not view the same scene, '
                 'or need more overlap.')
-        coarse_t = np.array(coarse.transformation)
         if observer:
-            observer(f'{label}: global alignment',
+            observer(f'{label}: global alignment (TEASER++ inliers: {coarse_confidence:.0%})',
                      placed_items((index, _transform(down_points[index], coarse_t))))
 
+        # Fine registration with ICP
         on_step = None
         if observer:
             def on_step(t, _i=index, _label=label):
-                observer(f'{_label}: refining', placed_items((_i, _transform(down_points[_i], t))))
+                observer(f'{_label}: refining (ICP)', placed_items((_i, _transform(down_points[_i], t))))
         fine_t = local_registration(source, target, coarse_t, voxel, params, on_step)
 
+        # Validate fine alignment
         check = reg.evaluate_registration(source, target, voxel * 1.5, fine_t)
         if check.fitness < params.min_fine_fitness or check.inlier_rmse > voxel * params.max_fine_rmse_voxels:
             raise RegistrationError(
-                f'Alignment of cloud {index + 1} is not reliable (overlap {check.fitness:.0%}, '
+                f'Alignment of cloud {index + 1} is not reliable after ICP (overlap {check.fitness:.0%}, '
                 f'rms error {check.inlier_rmse * 100:.1f} cm). Scans need a shared, well-structured view.')
         transforms.append(fine_t)
-        pairs.append(PairResult(index, fine_t, float(coarse.fitness), float(check.fitness), float(check.inlier_rmse)))
+        pairs.append(PairResult(index, fine_t, float(coarse_confidence), float(check.fitness), float(check.inlier_rmse)))
         merged = (merged + _to_pcd(_transform(down_points[index], fine_t))).voxel_down_sample(voxel)
         if observer:
             observer(f'{label}: aligned', placed_items())

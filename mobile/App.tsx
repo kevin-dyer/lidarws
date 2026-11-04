@@ -1131,7 +1131,7 @@ export default function App() {
               </View>
             ) : (
               <View style={styles.cloudWrap}>
-                <PointCloudView points={livePoints} fill zoom={ZOOM} />
+                <PointCloudView points={livePoints} fill zoom={ZOOM} autoRotate />
                 <View style={styles.progressOverlay}>
                   <View style={styles.progressRing}>
                     <SvgRing progress={scanProgress.percent} />
@@ -1168,7 +1168,7 @@ export default function App() {
             />
             <ScrollView contentContainerStyle={styles.finishedContent}>
               <View style={[styles.finishedCloud, { width: screenWidth, height: screenWidth * 1.05 }]}>
-                <PointCloudView points={scanPoints} fill zoom={ZOOM} height={screenWidth * 1.05} />
+                <PointCloudView points={scanPoints} fill zoom={ZOOM} height={screenWidth * 1.05} autoRotate />
               </View>
               <Text style={styles.cloudCaption}>
                 {scanPoints.length.toLocaleString()} points captured · {effectiveDuration} second sweep
@@ -1370,7 +1370,7 @@ export default function App() {
             <ScrollView contentContainerStyle={styles.finishedContent} keyboardShouldPersistTaps="handled">
               <NameField value={selectedScan.name} onCommit={(name) => commitRename(selectedScan, name)} />
               <View style={[styles.finishedCloud, { width: screenWidth, height: screenWidth * 1.05 }]}>
-                <PointCloudView points={selectedPoints} fill zoom={ZOOM} height={screenWidth * 1.05} />
+                <PointCloudView points={selectedPoints} fill zoom={ZOOM} height={screenWidth * 1.05} autoRotate />
                 <View pointerEvents="none" style={styles.detailCaption}>
                   <Text style={styles.detailDate}>{formatDate(selectedScan.createdAt)}</Text>
                   <Text style={styles.detailMeta}>{selectedScan.pointCount.toLocaleString()} points</Text>
