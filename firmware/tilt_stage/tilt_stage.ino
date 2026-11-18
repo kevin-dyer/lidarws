@@ -31,6 +31,7 @@ const uint8_t MUX_MAGIC_0 = 0xA5;
 const uint8_t MUX_MAGIC_1 = 0x5A;
 const uint8_t MUX_CHANNEL_LIDAR = 1;
 const uint8_t MUX_CHANNEL_TILT = 2;
+const uint8_t MUX_CHANNEL_LIDAR_TIMED = 3;
 const uint8_t MUX_CHANNEL_CONTROL = 0x7F;
 const uint16_t UDP_PORT = 4210;
 const size_t MUX_MAX_PAYLOAD = 1190;
@@ -51,6 +52,8 @@ const float MAX_ANGLE_DEG = 45.0;
 const float DEFAULT_SWEEP_START_DEG = -15.0;
 const float DEFAULT_SWEEP_STOP_DEG = 15.0;
 const unsigned long SWEEP_SAMPLE_INTERVAL_US = 10000UL;
+const uint32_t TIMED_LIDAR_BATCH_WAIT_US = 5000;
+const int TIMED_LIDAR_BATCH_BYTES = 64;
 
 uint8_t tiltRxBuffer[TILT_RX_BUFFER_SIZE];
 size_t tiltRxHead = 0;
@@ -58,6 +61,10 @@ size_t tiltRxTail = 0;
 size_t tiltRxCount = 0;
 bool tiltRxOverflow = false;
 uint8_t lidarTxBuffer[MUX_MAX_PAYLOAD];
+bool timedLidarEnabled = false;
+uint32_t timedLidarSequence = 0;
+bool timedLidarBatchPending = false;
+uint32_t timedLidarBatchStartUs = 0;
 uint8_t previousLidarCommandByte = 0;
 WiFiUDP udp;
 IPAddress hostAddress;
@@ -206,6 +213,7 @@ void processUdpFrame(const uint8_t *packet, size_t packetLength,
     hostAddress = senderAddress;
     hostPort = senderPort;
     hostKnown = true;
+    if (newHost) timedLidarEnabled = false;
     sendMuxFrame(MUX_CHANNEL_CONTROL,
                  reinterpret_cast<const uint8_t *>("PONG"), 4);
     if (newHost) {
@@ -215,6 +223,32 @@ void processUdpFrame(const uint8_t *packet, size_t packetLength,
   }
 
   if (!hostKnown || senderAddress != hostAddress || senderPort != hostPort) {
+    return;
+  }
+  if (channel == MUX_CHANNEL_CONTROL && length == 5 &&
+      memcmp(payload, "CLOCK", 5) == 0) {
+    char reply[32];
+    const int replyLength = snprintf(reply, sizeof(reply), "CLOCK,%lu",
+                                     (unsigned long)micros());
+    sendMuxFrame(MUX_CHANNEL_CONTROL,
+                 reinterpret_cast<const uint8_t *>(reply), replyLength);
+    return;
+  }
+  if (channel == MUX_CHANNEL_CONTROL && length == 6 &&
+      memcmp(payload, "TIMEON", 6) == 0) {
+    timedLidarEnabled = true;
+    timedLidarSequence = 0;
+    timedLidarBatchPending = false;
+    sendMuxFrame(MUX_CHANNEL_CONTROL,
+                 reinterpret_cast<const uint8_t *>("TIMEON_OK"), 9);
+    return;
+  }
+  if (channel == MUX_CHANNEL_CONTROL && length == 7 &&
+      memcmp(payload, "TIMEOFF", 7) == 0) {
+    timedLidarEnabled = false;
+    timedLidarBatchPending = false;
+    sendMuxFrame(MUX_CHANNEL_CONTROL,
+                 reinterpret_cast<const uint8_t *>("TIMEOFF_OK"), 10);
     return;
   }
   if (channel == MUX_CHANNEL_CONTROL && length >= 6 &&
@@ -342,16 +376,49 @@ void serviceStationLink() {
 void serviceLidarBridge() {
   serviceStationLink();
   processUdpPackets();
+  const int availableAtRead = Serial1.available();
+  if (availableAtRead <= 0) {
+    timedLidarBatchPending = false;
+    return;
+  }
+  const uint32_t readTimeUs = micros();
+  if (timedLidarEnabled) {
+    if (!timedLidarBatchPending) {
+      timedLidarBatchPending = true;
+      timedLidarBatchStartUs = readTimeUs;
+    }
+    if (availableAtRead < TIMED_LIDAR_BATCH_BYTES &&
+        readTimeUs - timedLidarBatchStartUs < TIMED_LIDAR_BATCH_WAIT_US) {
+      return;
+    }
+  }
+  timedLidarBatchPending = false;
   size_t count = 0;
-  while (count < sizeof(lidarTxBuffer) && Serial1.available() > 0) {
+  while (count < sizeof(lidarTxBuffer) - 8 && count < (size_t)availableAtRead) {
     const int value = Serial1.read();
     if (value < 0) {
       break;
     }
-    lidarTxBuffer[count++] = (uint8_t)value;
+    lidarTxBuffer[8 + count++] = (uint8_t)value;
   }
   if (count > 0) {
-    sendMuxFrame(MUX_CHANNEL_LIDAR, lidarTxBuffer, count);
+    sendMuxFrame(MUX_CHANNEL_LIDAR, lidarTxBuffer + 8, count);
+    if (timedLidarEnabled) {
+      // UART bytes take ten bit periods each. Account for bytes already
+      // buffered behind this chunk; software scheduling still adds latency.
+      const uint32_t behind = availableAtRead - count;
+      const uint32_t lastByteUs = readTimeUs - (behind * 10000000ULL / 115200);
+      lidarTxBuffer[0] = lastByteUs & 0xFF;
+      lidarTxBuffer[1] = (lastByteUs >> 8) & 0xFF;
+      lidarTxBuffer[2] = (lastByteUs >> 16) & 0xFF;
+      lidarTxBuffer[3] = lastByteUs >> 24;
+      lidarTxBuffer[4] = timedLidarSequence & 0xFF;
+      lidarTxBuffer[5] = (timedLidarSequence >> 8) & 0xFF;
+      lidarTxBuffer[6] = (timedLidarSequence >> 16) & 0xFF;
+      lidarTxBuffer[7] = timedLidarSequence >> 24;
+      ++timedLidarSequence;
+      sendMuxFrame(MUX_CHANNEL_LIDAR_TIMED, lidarTxBuffer, count + 8);
+    }
   }
 }
 
@@ -418,6 +485,8 @@ enum TiltMotionState {
   TILT_IDLE,
   TILT_MOVING_TO_SWEEP_START,
   TILT_SWEEPING,
+  TILT_OSC_POSITIONING,
+  TILT_OSCILLATING,
   TILT_RETURNING_HOME
 };
 
@@ -430,6 +499,9 @@ bool invertTilt = false;
 bool enabled = true;
 TiltMotionState tiltMotionState = TILT_IDLE;
 long sweepStopSteps = 0;
+long oscMinSteps = 0;
+long oscMaxSteps = 0;
+float oscSpeedDegS = 0.0;
 unsigned long lastSweepSampleMicros = 0;
 
 float calcStepsPerDegree() {
@@ -607,6 +679,42 @@ void startTiltSweep(float startAngle, float stopAngle) {
   stepper.moveTo(lround(angleToSteps(startAngle)));
 }
 
+// Continuous back-and-forth sweep for hand-held mapping; runs until 'X'.
+// One full min->max->min cycle takes about periodSeconds, limited to the homing speed.
+void startTiltOscillation(float minAngle, float maxAngle, float periodSeconds) {
+  if (tiltMotionState != TILT_IDLE) {
+    TiltSerial.println(F("ERR BUSY"));
+    return;
+  }
+  if (!isfinite(minAngle) || !isfinite(maxAngle) || !isfinite(periodSeconds) ||
+      fabs(minAngle) > MAX_ANGLE_DEG || fabs(maxAngle) > MAX_ANGLE_DEG ||
+      minAngle >= maxAngle || periodSeconds <= 0.0) {
+    TiltSerial.println(F("ERR OSC LIMIT"));
+    return;
+  }
+  const float speed = (2.0 * (maxAngle - minAngle)) / periodSeconds;
+  if (speed > HOMING_SPEED_DEG_S) {
+    TiltSerial.println(F("ERR OSC SPEED"));
+    return;
+  }
+  if (!tiltHomed) {
+    if (!findHome()) {
+      stepper.setCurrentPosition(0);
+      stepper.moveTo(0);
+      TiltSerial.println(F("Error homing"));
+      return;
+    }
+    tiltHomed = true;
+  }
+
+  oscMinSteps = lround(angleToSteps(minAngle));
+  oscMaxSteps = lround(angleToSteps(maxAngle));
+  oscSpeedDegS = speed;
+  stepper.setMaxSpeed(angleToSteps(HOMING_SPEED_DEG_S));
+  tiltMotionState = TILT_OSC_POSITIONING;
+  stepper.moveTo(oscMinSteps);
+}
+
 void stopTiltSweepAndReturnHome() {
   tiltMotionState = TILT_RETURNING_HOME;
   stepper.setMaxSpeed(angleToSteps(HOMING_SPEED_DEG_S));
@@ -627,6 +735,27 @@ void updateTiltMotion() {
     tiltMotionState = TILT_SWEEPING;
     lastSweepSampleMicros = micros();
     emitSweepSample();
+    return;
+  }
+
+  if (tiltMotionState == TILT_OSC_POSITIONING && stepper.distanceToGo() == 0) {
+    stepper.setMaxSpeed(angleToSteps(oscSpeedDegS));
+    stepper.moveTo(oscMaxSteps);
+    tiltMotionState = TILT_OSCILLATING;
+    lastSweepSampleMicros = micros();
+    emitSweepSample();
+    return;
+  }
+
+  if (tiltMotionState == TILT_OSCILLATING) {
+    if (stepper.distanceToGo() == 0) {
+      stepper.moveTo(stepper.currentPosition() == oscMaxSteps ? oscMinSteps : oscMaxSteps);
+    }
+    const unsigned long now = micros();
+    if (now - lastSweepSampleMicros >= SWEEP_SAMPLE_INTERVAL_US) {
+      lastSweepSampleMicros = now;
+      emitSweepSample();
+    }
     return;
   }
 
@@ -867,6 +996,25 @@ void serialParse() {
           break;
         }
         startTiltSweep(startAngle, stopAngle);
+        break;
+      }
+    case 'W':
+      {
+        float minAngle = 0.0;
+        float maxAngle = 0.0;
+        float period = 0.0;
+        char *first = strchr(payload, ',');
+        char *second = first ? strchr(first + 1, ',') : NULL;
+        if (first == NULL || second == NULL) {
+          TiltSerial.println(F("ERR W expected minAngle,maxAngle,periodSeconds"));
+          break;
+        }
+        *first = '\0';
+        *second = '\0';
+        minAngle = atof(payload);
+        maxAngle = atof(first + 1);
+        period = atof(second + 1);
+        startTiltOscillation(minAngle, maxAngle, period);
         break;
       }
     case 'X':

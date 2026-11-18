@@ -1,6 +1,6 @@
 declare module 'react-native-udp' {
   interface UdpSocket {
-    bind(port: number, address?: string, callback?: () => void): void;
+    bind(port: number, address?: string, callback?: (error?: Error | null) => void): void;
     close(): void;
     on(event: 'message', listener: (message: Uint8Array, info: { address: string; port: number }) => void): this;
     on(event: 'error', listener: (error: Error) => void): this;

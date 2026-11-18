@@ -17,6 +17,15 @@ export interface SavedScan {
   startAngle: number;
   stopAngle: number;
   groupId?: string;
+  /** Present for hand-held mapping scans: the recorded forward video and the estimated sensor trajectory. */
+  videoUri?: string;
+  trajectoryUri?: string;
+}
+
+/** Extra files saved next to a mobile-mapping point cloud. */
+export interface MappingAssets {
+  videoSourceUri?: string;
+  trajectoryJson: string;
 }
 
 async function readScans(): Promise<SavedScan[]> {
@@ -38,7 +47,7 @@ export async function saveScan(
   points: Point3[],
   settings: { durationSeconds: number; startAngle: number; stopAngle: number },
   photoSourceUri?: string,
-  options: { name?: string; groupId?: string; anchorId?: string } = {},
+  options: { name?: string; groupId?: string; anchorId?: string; mapping?: MappingAssets } = {},
 ): Promise<SavedScan> {
   const directory = FileSystem.documentDirectory;
   if (!directory) {
@@ -54,6 +63,26 @@ export async function saveScan(
     await FileSystem.copyAsync({ from: photoSourceUri, to: photoUri });
   }
 
+  const videoUri = options.mapping?.videoSourceUri ? `${directory}${id}_video.mp4` : undefined;
+  const trajectoryUri = options.mapping ? `${directory}${id}_trajectory.json` : undefined;
+  try {
+    if (options.mapping && trajectoryUri) {
+      await FileSystem.writeAsStringAsync(trajectoryUri, options.mapping.trajectoryJson, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      if (videoUri && options.mapping.videoSourceUri) {
+        await FileSystem.copyAsync({ from: options.mapping.videoSourceUri, to: videoUri });
+      }
+    }
+  } catch (error) {
+    await Promise.all(
+      [fileUri, photoUri, videoUri, trajectoryUri].map((uri) =>
+        uri ? FileSystem.deleteAsync(uri, { idempotent: true }) : Promise.resolve(),
+      ),
+    );
+    throw error;
+  }
+
   const scan: SavedScan = {
     id,
     name: options.name?.trim() || new Date().toLocaleString(),
@@ -64,6 +93,8 @@ export async function saveScan(
     durationSeconds: settings.durationSeconds,
     startAngle: settings.startAngle,
     stopAngle: settings.stopAngle,
+    videoUri,
+    trajectoryUri,
   };
   try {
     const existing = await readScans();
@@ -75,8 +106,8 @@ export async function saveScan(
     await writeScans([scan, ...existing]);
   } catch (error) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true });
-    if (photoUri) {
-      await FileSystem.deleteAsync(photoUri, { idempotent: true });
+    for (const uri of [photoUri, videoUri, trajectoryUri]) {
+      if (uri) await FileSystem.deleteAsync(uri, { idempotent: true });
     }
     throw error;
   }
@@ -114,8 +145,8 @@ export async function removeScanPhoto(scan: SavedScan): Promise<void> {
 
 export async function deleteScan(scan: SavedScan): Promise<void> {
   await FileSystem.deleteAsync(scan.fileUri, { idempotent: true });
-  if (scan.photoUri) {
-    await FileSystem.deleteAsync(scan.photoUri, { idempotent: true });
+  for (const uri of [scan.photoUri, scan.videoUri, scan.trajectoryUri]) {
+    if (uri) await FileSystem.deleteAsync(uri, { idempotent: true });
   }
   await writeScans((await readScans()).filter((saved) => saved.id !== scan.id));
 }

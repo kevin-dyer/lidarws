@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Find and connect to your 3D lidar scanner on the local Wi-Fi network.",
-        "NSCameraUsageDescription": "Take a reference photo for a completed lidar scan.",
+        "NSCameraUsageDescription": "Take a reference photo for a completed lidar scan and record video while mobile mapping.",
+        "NSMotionUsageDescription": "Use the motion sensors to track the scanner while mobile mapping.",
         "NSPhotoLibraryUsageDescription": "Select a reference photo for a completed lidar scan."
       },
       "bundleIdentifier": "com.anonymous.tiltlidar"
@@ -20,6 +21,7 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.NEARBY_WIFI_DEVICES",
         "android.permission.ACCESS_LOCAL_NETWORK",

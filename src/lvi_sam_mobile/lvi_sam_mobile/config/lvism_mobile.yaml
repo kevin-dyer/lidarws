@@ -1,0 +1,64 @@
+/**
+ * LVI-SAM configuration for mobile mapping
+ * 
+ * This configuration is tuned for hand-held scanning with a tilt stage
+ * and a phone-mounted camera. Adjust based on your hardware and environment.
+ */
+
+// IMU parameters
+imuAccNoise: 1.0e-2
+imuGyrNoise: 1.0e-3
+imuAccBiasNoise: 1.0e-5
+imuGyrBiasNoise: 1.0e-5
+imuGravity: 9.81
+imuRPYWeight: 0.01
+
+// LiDAR parameters
+lidarRange: 12.0              # Max range in meters
+lidarNumScans: 1
+lidarNumPoints: 1024
+
+// Camera parameters
+cameraCalibrationFile: ""     # Optional; leave empty to estimate
+cameraDistortionModel: "plumb_bob"
+
+// Feature tracking
+featureExtractionMethod: "ORB"  # ORB, SIFT, or AKAZE
+featureMaxCount: 300
+featureQualityLevel: 0.01
+
+// Optical flow
+opticalFlowMaxLevel: 3
+opticalFlowWindowSize: 21
+
+// Matching
+matchingMethod: "BF"            # BF (brute force) or FLANN
+matchingDistanceThreshold: 0.7
+ransacIterations: 1000
+ransacThreshold: 8.0
+
+// Tracking
+trackingMethod: "PnP"           # PnP or visual odometry
+minTrackedFeatures: 20
+
+// BA (Bundle Adjustment) parameters
+baWindowSize: 3
+baMaxIterations: 10
+baLossFunctionType: "Cauchy"
+
+// Map
+mapKeyframeThreshold: 0.5       # Meters; how far the scanner must move to add a new keyframe
+mapLocalMapRadius: 20.0         # Meters
+mapMaxClouds: 1000              # Maximum number of local maps to keep
+
+// Loop closure
+loopClosureEnabled: true
+loopClosureHistorySize: 20
+loopClosureCandidateCount: 5
+loopClosureScoreThreshold: 0.7
+
+// Output
+publishPointCloud: true
+publishTrajectory: true
+publishKeyFrames: true
+visualizationUpdateRate: 10     # Hz

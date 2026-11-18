@@ -1,0 +1,217 @@
+================================================================================
+FAST-LIVO2 DATA FLOW: From Mobile Device to SLAM Output
+================================================================================
+
+STAGE 1: DATA SOURCES (Mobile Device)
+─────────────────────────────────────────────────────────────────────────────
+
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│  3D LiDAR        │      │   Phone IMU      │      │   Phone Camera   │
+│  Scanner         │      │   (Accel+Gyro)   │      │   (RTSP Stream)  │
+│  (RPLIDAR 360°)  │      │   20 Hz updates  │      │   H.264 encoded  │
+└────────┬─────────┘      └────────┬─────────┘      └────────┬─────────┘
+         │                         │                         │
+         │ USB/Serial              │ Sensor                  │ WiFi/LTE
+         │ 120 points/scan         │ data stream             │ TCP:8554
+         │ 8-16 Hz                 │                         │
+         │                         │                         │
+         └─────────────────────────┴─────────────────────────┘
+                                   │
+                         (All via same WiFi network)
+
+
+STAGE 2: UDP/RTSP TRANSMISSION
+─────────────────────────────────────────────────────────────────────────────
+
+Mobile Device broadcasts:
+  • UDP 5000: LiDAR frames (struct format: time_us, quality, angle, distances)
+  • UDP 5001: IMU samples (struct format: timestamp, ax, ay, az, gx, gy, gz)
+  • TCP 5554: RTSP stream (H.264 video encoded)
+
+
+STAGE 3: MOBILE BRIDGE RECEIVES & CONVERTS
+─────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      ROS 2 APPLICATION (lidarws)                        │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  UDP LiDAR Receiver                                              │  │
+│  │  ├─ Listens on UDP port 5000                                    │  │
+│  │  ├─ Decodes RPLIDAR frame format                                │  │
+│  │  ├─ Converts to PointCloud2 (x, y, z, float32 per point)       │  │
+│  │  └─ Publishes: /lidar/points [sensor_msgs/PointCloud2]         │  │
+│  │                                                                   │  │
+│  │  UDP IMU Receiver                                               │  │
+│  │  ├─ Listens on UDP port 5001                                   │  │
+│  │  ├─ Decodes IMU packet format                                   │  │
+│  │  ├─ Converts to Imu message (accel + gyro)                     │  │
+│  │  └─ Publishes: /imu/data [sensor_msgs/Imu] @ 20 Hz            │  │
+│  │                                                                   │  │
+│  │  Camera Bridge (RTSP Decoder)                                   │  │
+│  │  ├─ Connects to RTSP stream at 192.168.1.X:8554/stream        │  │
+│  │  ├─ Decodes H.264 video frames                                 │  │
+│  │  ├─ Converts BGR→RGB color space                               │  │
+│  │  └─ Publishes: /camera/image_raw [sensor_msgs/Image] @ 20-30Hz│  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                │                                        │
+│                 ┌──────────────┼──────────────┐                        │
+│                 ▼              ▼              ▼                        │
+│         /lidar/points    /imu/data    /camera/image_raw               │
+│                                │                                        │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  Topic Adapter (fast_livo_adapter.py) — NEW!                    │  │
+│  │                                                                   │  │
+│  │  Subscribes:                                                    │  │
+│  │  ├─ /lidar/points [PointCloud2]                                │  │
+│  │  ├─ /imu/data [Imu]                                            │  │
+│  │  └─ /camera/image_raw [Image]                                  │  │
+│  │                                                                   │  │
+│  │  Republishes (no transformation):                               │  │
+│  │  ├─ → /livox/lidar [PointCloud2]                               │  │
+│  │  ├─ → /livox/imu [Imu]                                         │  │
+│  │  └─ → /left_camera/image [Image]                               │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                │                                        │
+│                 ┌──────────────┼──────────────┐                        │
+│                 ▼              ▼              ▼                        │
+│         /livox/lidar      /livox/imu   /left_camera/image             │
+└─────────────────────────────────────────────────────────────────────────┘
+                  │                              
+                  │ (ROS 2 inter-process communication)
+                  │
+
+
+STAGE 4: FAST-LIVO2 PROCESSING
+─────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     FAST-LIVO2 Node (fastlivo_mapping)                  │
+│            (from ~/dev/ros2_fast_livo_ws, separate workspace)           │
+│                                                                          │
+│  Subscribed Topics (from adapter):                                     │
+│  ├─ /livox/lidar ← Point cloud frames                                  │
+│  ├─ /livox/imu ← Inertial measurements                                 │
+│  └─ /left_camera/image ← Visual features                              │
+│                                                                          │
+│  Algorithm: LiDAR-Inertial-Visual Direct Odometry                      │
+│  ├─ LiDAR: Direct scan matching, edge/surface features                │
+│  ├─ Inertial: Pre-integration, bias estimation                        │
+│  └─ Visual: Photometric tracking, keyframe optimization               │
+│                                                                          │
+│  Outputs:                                                              │
+│  ├─ /tf [geometry_msgs/TransformStamped]                              │
+│  │   └─ base_link ↔ world transforms (pose updates)                   │
+│  ├─ /odom [nav_msgs/Odometry]                                         │
+│  │   └─ Visual-inertial odometry with covariance                      │
+│  ├─ /cloud_pcd [sensor_msgs/PointCloud2]                              │
+│  │   └─ Dense point cloud map                                         │
+│  └─ /key_points [sensor_msgs/PointCloud2]                             │
+│      └─ Tracked keypoint features                                      │
+│                                                                          │
+│  Configuration (avia.yaml):                                            │
+│  ├─ extrinsic_T: [0.04, 0.02, -0.03] — Camera offset from LiDAR      │
+│  ├─ extrinsic_R: [Rotation matrix] — Camera orientation               │
+│  ├─ scan_line: 6 — RPLIDAR has 6/8/16 laser lines                    │
+│  └─ time_offset: Synchronization timing                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                │
+                 ┌──────────────┼──────────────────┐
+                 ▼              ▼                  ▼
+            /tf topic    /odom topic        /cloud_pcd topic
+
+
+STAGE 5: VISUALIZATION
+─────────────────────────────────────────────────────────────────────────────
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         RViz2 Visualization                              │
+│                                                                           │
+│  Display Elements:                                                      │
+│  ├─ Point Cloud Map (from /cloud_pcd)                                  │
+│  │  └─ Dense 3D reconstruction of environment                          │
+│  │                                                                       │
+│  ├─ Trajectory (from /tf and /odom)                                    │
+│  │  └─ Camera path through 3D space                                    │
+│  │                                                                       │
+│  ├─ Coordinate Frames                                                  │
+│  │  ├─ base_link (LiDAR origin)                                        │
+│  │  ├─ camera (Camera frame)                                           │
+│  │  ├─ imu (IMU frame)                                                 │
+│  │  └─ world (Global/map frame)                                        │
+│  │                                                                       │
+│  └─ Feature Points (from /key_points)                                  │
+│     └─ Tracked visual/LiDAR features                                   │
+│                                                                           │
+│  Configuration: fast_livo2.rviz                                        │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+
+LATENCY & TIMING
+─────────────────────────────────────────────────────────────────────────────
+
+Mobile Device        → Network → Bridge Receiver → Processing → FAST-LIVO2
+    |                    |           |              |              |
+    0ms                10-20ms      0ms          0ms             30-50ms
+    (generation)    (WiFi latency) (decode)   (adapter)       (SLAM algo)
+
+Total end-to-end latency: ~30-80ms (depends on network and WiFi interference)
+
+
+KEY DESIGN POINTS
+─────────────────────────────────────────────────────────────────────────────
+
+1. SEPARATE WORKSPACES
+   ├─ lidarws: Your application (mobile bridge + adapter)
+   └─ ros2_fast_livo_ws: FAST-LIVO2 (independent SLAM)
+   → Easy to develop, debug, and swap components
+
+2. TOPIC ADAPTER (NEW)
+   ├─ Minimal: ~10 lines per topic
+   ├─ Zero overhead: Direct message passthrough
+   └─ Independent: Works with any LiDAR or camera source
+
+3. ROS 2 TOPICS (standard messages)
+   ├─ PointCloud2: PCL standard for 3D points
+   ├─ Imu: Standard IMU messages with covariance
+   └─ Image: Standard sensor image format
+   → Any other source can feed FAST-LIVO2 with this setup
+
+4. CONFIGURATION (avia.yaml)
+   ├─ Sensor calibration (extrinsic parameters)
+   ├─ Preprocessing parameters
+   ├─ Algorithm tuning (VIO, LIO options)
+   └─ Output options (map density, pose publication)
+
+
+EXAMPLE DATA RATES
+─────────────────────────────────────────────────────────────────────────────
+
+Typical timing during a mapping run:
+
+LiDAR (/livox/lidar):        30-40 Hz × 1000-5000 points/frame
+  → ~30-200 MB/s in topics (depends on point count)
+
+IMU (/livox/imu):             20 Hz × 36 bytes/sample
+  → ~0.7 KB/s
+
+Camera (/left_camera/image):  20-30 Hz × 640×480×3 bytes (RGB)
+  → ~18-27 MB/s in topics
+
+TOTAL NETWORK LOAD: ~50-230 MB/s (high variance)
+
+
+TROUBLESHOOTING CHECKLIST
+─────────────────────────────────────────────────────────────────────────────
+
+✓ Mobile device is on same WiFi network
+✓ Mobile IP is correct (e.g., 192.168.1.100)
+✓ Both ROS workspaces are sourced
+✓ ros2 topic list shows /livox/* topics
+✓ ros2 topic hz /livox/lidar returns non-zero
+✓ ros2 topic hz /livox/imu ≈ 20 Hz
+✓ FAST-LIVO2 node is running (ros2 node list)
+✓ RViz2 shows /cloud_pcd topic
+✓ No errors in terminal (watch for "node not found", topic subscription issues)
+

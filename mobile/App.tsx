@@ -60,9 +60,10 @@ import type { Point3 } from './src/scanner/pointCloud';
 import { ScanCarousel } from './src/components/ScanCarousel';
 import { NameField } from './src/components/NameField';
 import { GroupPicker, type GroupChoice } from './src/components/GroupPicker';
+import { MobileMapping, type MappingResult } from './src/components/MobileMapping';
 import { buildShareFile, deleteScan, listScans, loadScanPoints, removeScanPhoto, renameScan, saveScan, setScansGroup, shareableFiles, type SavedScan } from './src/storage/scans';
 
-type Screen = 'home' | 'setup' | 'connect' | 'profile' | 'scan' | 'scanning' | 'finished' | 'gallery' | 'group' | 'detail';
+type Screen = 'home' | 'setup' | 'connect' | 'profile' | 'scan' | 'scanning' | 'mapping' | 'finished' | 'gallery' | 'group' | 'detail';
 
 
 const INITIAL_SCAN: ScanSettings = {
@@ -206,6 +207,7 @@ export default function App() {
   });
   const [scanPoints, setScanPoints] = useState<Point3[]>([]);
   const [livePoints, setLivePoints] = useState<Point3[]>([]);
+  const [mappingResult, setMappingResult] = useState<MappingResult | null>(null);
   const [scanPhoto, setScanPhoto] = useState<string | undefined>();
   const [scans, setScans] = useState<SavedScan[]>([]);
   const [loadingScans, setLoadingScans] = useState(false);
@@ -298,7 +300,7 @@ export default function App() {
   }, [screen, deviceAddress, scanner]);
 
   useEffect(() => {
-    if (!deviceAddress || screen === 'scanning' || screen === 'setup') return undefined;
+    if (!deviceAddress || screen === 'scanning' || screen === 'mapping' || screen === 'setup') return undefined;
     let misses = 0;
     let cancelled = false;
     const timer = setInterval(() => {
@@ -521,7 +523,26 @@ export default function App() {
     setSaving(true);
     setError(null);
     try {
-      await saveScan(scanPoints, { ...scanSettings, durationSeconds: scanDuration }, scanPhoto, { name: scanName, groupId: scanGroupId, anchorId: addToScan?.id });
+      await saveScan(
+        scanPoints,
+        mappingResult
+          ? {
+              durationSeconds: scanDuration,
+              startAngle: mappingResult.settings.minAngleDeg,
+              stopAngle: mappingResult.settings.maxAngleDeg,
+            }
+          : { ...scanSettings, durationSeconds: scanDuration },
+        scanPhoto,
+        {
+          name: scanName,
+          groupId: scanGroupId,
+          anchorId: addToScan?.id,
+          mapping: mappingResult
+            ? { videoSourceUri: mappingResult.videoUri, trajectoryJson: mappingResult.trajectoryJson }
+            : undefined,
+        },
+      );
+      setMappingResult(null);
       setScanPoints([]);
       setScanPhoto(undefined);
       setScanName('');
@@ -542,6 +563,7 @@ export default function App() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
+          setMappingResult(null);
           setScanPoints([]);
           setScanPhoto(undefined);
           setScanName('');
@@ -810,16 +832,28 @@ export default function App() {
 
             <View style={styles.bottomBar}>
               {showScannerSection ? (
-                <AppButton
-                  title="Start a scan"
-                  kind="light"
-                  icon={<Compass color={PALETTE.forest} size={19} />}
-                  onPress={() => {
-                    setError(null);
-                    setScreen('scan');
-                  }}
-                  disabled={!deviceAddress}
-                />
+                <View style={{ gap: 10 }}>
+                  <AppButton
+                    title="Start a scan"
+                    kind="light"
+                    icon={<Compass color={PALETTE.forest} size={19} />}
+                    onPress={() => {
+                      setError(null);
+                      setScreen('scan');
+                    }}
+                    disabled={!deviceAddress}
+                  />
+                  <AppButton
+                    title="Mobile mapping"
+                    kind="outline"
+                    icon={<Compass color={PALETTE.white} size={19} />}
+                    onPress={() => {
+                      setError(null);
+                      setScreen('mapping');
+                    }}
+                    disabled={!deviceAddress}
+                  />
+                </View>
               ) : (
                 <AppButton
                   title="Set up lidar"
@@ -1114,6 +1148,21 @@ export default function App() {
           </View>
         )}
 
+        {screen === 'mapping' && (
+          <MobileMapping
+            scanner={scanner}
+            connected={Boolean(deviceAddress)}
+            onClose={() => setScreen('home')}
+            onError={setError}
+            onFinished={(result) => {
+              setMappingResult(result);
+              setScanPoints(result.points);
+              setScanDuration(result.durationSeconds);
+              setScreen('finished');
+            }}
+          />
+        )}
+
         {screen === 'scanning' && (
           <View style={styles.scanningPage}>
             {scanProgress.phase === 'preparing' && (
@@ -1171,7 +1220,7 @@ export default function App() {
                 <PointCloudView points={scanPoints} fill zoom={ZOOM} height={screenWidth * 1.05} autoRotate />
               </View>
               <Text style={styles.cloudCaption}>
-                {scanPoints.length.toLocaleString()} points captured · {effectiveDuration} second sweep
+                {scanPoints.length.toLocaleString()} points captured · {mappingResult ? `${scanDuration} seconds mapped` : `${effectiveDuration} second sweep`}
               </Text>
               {addToScan && <Text style={styles.cloudCaption}>Will be grouped with “{addToScan.name}”</Text>}
               {renderScanMeta()}

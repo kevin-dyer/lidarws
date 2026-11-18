@@ -46,7 +46,9 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>Allow Tilt Lidar to take a reference photo for your scan.</string>
+    <string>Allow Tilt Lidar to take a reference photo for your scan and record video while mobile mapping.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Allow Tilt Lidar to use the motion sensors to track the scanner while mobile mapping.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Find and connect to your Tilt Lidar scanner on the local Wi-Fi network.</string>
     <key>NSMicrophoneUsageDescription</key>

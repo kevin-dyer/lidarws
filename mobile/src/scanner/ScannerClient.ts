@@ -1,15 +1,21 @@
 import { Buffer } from 'buffer';
 import dgram from 'react-native-udp';
 import { raysToWorldPoints, type Point3 } from './pointCloud';
+import { TiltTrack } from '../mapping/tiltTrack';
+import { BoardClock } from './boardClock';
+import { TimedPacketOrder } from './timedPacketOrder';
+import type { MappingSettings } from '../mapping/settings';
 import {
   CHANNEL_CONTROL,
   CHANNEL_LIDAR,
+  CHANNEL_LIDAR_TIMED,
   CHANNEL_TILT,
   decodeFrame,
   encodeFrame,
   MAX_TILT_SPEED_DEG_S,
   RplidarParser,
   STEPS_PER_DEGREE,
+  type Ray,
 } from './protocol';
 
 const BOARD_PORT = 4210;
@@ -55,7 +61,25 @@ export class ConnectionLostError extends Error {
   }
 }
 
+/** One lidar revolution as scanner-frame points, with its time span on the host clock (seconds). */
+export interface MappingRevolution {
+  points: Point3[];
+  tStart: number;
+  tEnd: number;
+}
+
+export interface MappingHooks {
+  onRevolution: (revolution: MappingRevolution) => void;
+  onTimedRevolution?: (points: Array<{ point: Point3; time: number }>) => void;
+  onError: (error: Error) => void;
+}
+
+export interface MappingSession {
+  stop: () => Promise<void>;
+}
+
 const SILENCE_LIMIT_MS = 6000;
+const RAY_CHUNK = 16;
 const PREVIEW_IDLE_MS = 3000;
 
 type LineWaiter = {
@@ -86,9 +110,14 @@ export class ScannerClient {
   private scanning = false;
   private lastPongAt = 0;
   private lastLidarRxAt = 0;
+  private mapping: { hooks: MappingHooks; maxRangeM: number; lastRevolutionAt: number } | null = null;
+  private readonly tiltTrack = new TiltTrack();
   private cancelActiveScan: ((error: Error) => void) | null = null;
   private lineWaiters: LineWaiter[] = [];
   private readonly lidarParser = new RplidarParser();
+  private readonly timedLidarParser = new RplidarParser();
+  private boardClock: BoardClock | null = null;
+  private timedPacketOrder: TimedPacketOrder<Uint8Array> | null = null;
   private readonly points: Point3[] = [];
   private onPoints?: (points: Point3[]) => void;
   private lastPointsEmit = 0;
@@ -375,6 +404,188 @@ export class ScannerClient {
     }
   }
 
+  /**
+   * Starts hand-held mapping: homes the stage, makes it oscillate continuously, and streams lidar revolutions
+   * (each ray already rotated by the stage tilt at its own time) until `stop()` is called.
+   */
+  async startMapping(settings: MappingSettings, hooks: MappingHooks): Promise<MappingSession> {
+    if (!this.boardAddress) await this.discover();
+    if (this.scanning) throw new Error('A scan is already in progress.');
+
+    this.endPreviewTimers();
+    this.previewTarget = null;
+    this.scanning = true;
+    this.cancelRequested = false;
+    this.lastRxAt = Date.now();
+    this.previewAngleNow = 0;
+    this.tiltTrack.clear();
+    this.lidarParser.reset();
+    this.timedLidarParser.reset();
+    this.timedPacketOrder?.close();
+    this.timedPacketOrder = null;
+
+    const watchdog = setInterval(() => {
+      if (!this.boardAddress) return;
+      this.sendControl(new Uint8Array([80, 73, 78, 71]));
+      if (Date.now() - this.lastRxAt > SILENCE_LIMIT_MS) {
+        clearInterval(watchdog);
+        hooks.onError(new ConnectionLostError());
+      }
+    }, 1000);
+    const finish = (): void => {
+      clearInterval(watchdog);
+      this.timedPacketOrder?.close();
+      this.timedPacketOrder = null;
+      if (hooks.onTimedRevolution) this.sendControl(Buffer.from('TIMEOFF'));
+      this.boardClock = null;
+      this.mapping = null;
+      this.scanning = false;
+      this.cancelActiveScan = null;
+      for (const waiter of this.lineWaiters) {
+        clearTimeout(waiter.timeout);
+        waiter.reject(new ScanCancelledError());
+      }
+      this.lineWaiters = [];
+    };
+
+    try {
+      if (hooks.onTimedRevolution) {
+        try {
+          await this.syncBoardClock();
+          const response = this.waitForControl((text) => text === 'TIMEON_OK', 3000);
+          this.sendControl(Buffer.from('TIMEON'));
+          await response;
+        } catch (error) {
+          if (error instanceof Error && error.message === 'Timed out waiting for a scanner response.') {
+            throw new Error('Scanner timing commands did not respond. Update the firmware and check its Wi-Fi connection.');
+          }
+          throw error;
+        }
+      }
+      await this.tiltChain;
+      const home = this.waitForTiltLine(
+        (line) => line.includes('Homing complete') || line.startsWith('Error homing'),
+        90000,
+      );
+      this.sendTilt('A\n');
+      if ((await home).startsWith('Error homing')) {
+        throw new Error('The tilt stage could not find its home position.');
+      }
+
+      // The first sweep sample (or an error) answers the oscillation command.
+      const started = this.waitForTiltLine(
+        (line) => /^\d+,-?\d+$/.test(line) || line.startsWith('ERR') || line.startsWith('Error homing'),
+        90000,
+      );
+      this.sendTilt(
+        `W${settings.minAngleDeg.toFixed(2)},${settings.maxAngleDeg.toFixed(2)},${settings.sweepPeriodSeconds.toFixed(2)}\n`,
+      );
+      const first = await started;
+      if (!/^\d+,-?\d+$/.test(first)) {
+        throw new Error(
+          first.startsWith('ERR OSC SPEED')
+            ? 'The scanner cannot tilt that fast. Increase the sweep period or narrow the angles.'
+            : 'The scanner rejected the tilt sweep settings.',
+        );
+      }
+
+      this.lidarParser.reset();
+      this.timedLidarParser.reset();
+      this.sendLidar(new Uint8Array([0xa5, 0x20]));
+      this.lidarParser.beginCapture();
+      this.timedLidarParser.beginCapture();
+      this.mapping = { hooks, maxRangeM: settings.maxRangeM, lastRevolutionAt: Date.now() / 1000 };
+      if (hooks.onTimedRevolution) {
+        this.timedPacketOrder = new TimedPacketOrder(
+          (payload) => {
+            if (!this.boardClock || !this.mapping) return;
+            const data = Buffer.from(payload);
+            const bytes = payload.slice(8);
+            const times = this.boardClock.byteTimes(data.readUInt32LE(0), bytes.length);
+            this.timedLidarParser.push(bytes, (rays) => this.emitTimedMappingRevolution(rays), times);
+          },
+          (error) => {
+            if (!this.mapping) return;
+            this.mapping = null;
+            hooks.onError(error);
+          },
+        );
+      }
+    } catch (error) {
+      this.sendLidar(new Uint8Array([0xa5, 0x25]));
+      this.sendTilt('X\n');
+      finish();
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+
+    let stopped = false;
+    return {
+      stop: async (): Promise<void> => {
+        if (stopped) return;
+        stopped = true;
+        this.mapping = null;
+        this.timedPacketOrder?.close();
+        this.timedPacketOrder = null;
+        this.sendLidar(new Uint8Array([0xa5, 0x25]));
+        const done = this.waitForTiltLine((line) => line === 'X', 30000);
+        this.sendTilt('X\n');
+        try {
+          await done;
+        } catch {
+          // The stage is stopped either way; the board may just have dropped the confirmation.
+        } finally {
+          finish();
+        }
+      },
+    };
+  }
+
+  private async syncBoardClock(): Promise<void> {
+    let best: { rtt: number; counter: number; epoch: number } | null = null;
+    for (let i = 0; i < 3; i += 1) {
+      const start = Date.now();
+      const response = this.waitForControl((text) => /^CLOCK,\d+$/.test(text), 3000);
+      this.sendControl(Buffer.from('CLOCK'));
+      const text = await response;
+      const end = Date.now();
+      const counter = Number(text.slice(6));
+      if (!best || end - start < best.rtt) best = { rtt: end - start, counter, epoch: (start + end) / 2000 };
+    }
+    if (!best) throw new Error('Could not synchronize the scanner clock.');
+    this.boardClock = new BoardClock(best.counter, best.epoch);
+  }
+
+  private emitTimedMappingRevolution(rays: Ray[]): void {
+    const mapping = this.mapping;
+    const callback = mapping?.hooks.onTimedRevolution;
+    if (!mapping || !callback) return;
+    const points: Array<{ point: Point3; time: number }> = [];
+    for (const ray of rays) {
+      if (ray.time === undefined) continue;
+      const tilt = this.tiltTrack.angleAt(ray.time) ?? this.currentTiltDeg;
+      const [point] = raysToWorldPoints([ray], tilt, false, 90, 0.15, mapping.maxRangeM);
+      if (point) points.push({ point, time: ray.time });
+    }
+    if (points.length) callback(points);
+  }
+
+  private emitMappingRevolution(rays: Ray[]): void {
+    const mapping = this.mapping;
+    if (!mapping || rays.length === 0) return;
+    const tEnd = Date.now() / 1000;
+    const tStart = Math.min(mapping.lastRevolutionAt, tEnd - 0.01);
+    mapping.lastRevolutionAt = tEnd;
+    const points: Point3[] = [];
+    // Rays are ordered through the revolution, so spread them evenly over its time span.
+    for (let start = 0; start < rays.length; start += RAY_CHUNK) {
+      const chunk = rays.slice(start, start + RAY_CHUNK);
+      const t = tStart + ((start + chunk.length / 2) / rays.length) * (tEnd - tStart);
+      const tilt = this.tiltTrack.angleAt(t) ?? this.currentTiltDeg;
+      for (const point of raysToWorldPoints(chunk, tilt, false, 90, 0.15, mapping.maxRangeM)) points.push(point);
+    }
+    mapping.hooks.onRevolution({ points, tStart, tEnd });
+  }
+
   cancelScan(): void {
     if (!this.scanning) return;
     this.cancelRequested = true;
@@ -496,8 +707,17 @@ export class ScannerClient {
     if (sender !== this.boardAddress) return;
     if (frame.channel === CHANNEL_TILT) {
       this.receiveTilt(frame.payload);
+    } else if (frame.channel === CHANNEL_LIDAR_TIMED) {
+      if (!this.mapping?.hooks.onTimedRevolution || !this.boardClock || !this.timedPacketOrder || frame.payload.length <= 8) return;
+      const data = Buffer.from(frame.payload);
+      const sequence = data.readUInt32LE(4);
+      this.timedPacketOrder.push(sequence, frame.payload);
     } else if (frame.channel === CHANNEL_LIDAR) {
       this.lastLidarRxAt = Date.now();
+      if (this.mapping) {
+        this.lidarParser.push(frame.payload, (rays) => this.emitMappingRevolution(rays));
+        return;
+      }
       if (!this.scanning) return;
       this.lidarParser.push(frame.payload, (rays) => {
         if (this.captureActive) {
@@ -533,8 +753,10 @@ export class ScannerClient {
 
   private handleTiltLine(line: string): void {
     if (/^\d+,\-?\d+$/.test(line)) {
-      const steps = Number(line.split(',')[1]);
+      const [timestamp, stepText] = line.split(',');
+      const steps = Number(stepText);
       this.currentTiltDeg = steps / STEPS_PER_DEGREE;
+      this.tiltTrack.push(this.boardClock?.toEpochSeconds(Number(timestamp)) ?? Date.now() / 1000, this.currentTiltDeg);
     }
     const waiterIndex = this.lineWaiters.findIndex((waiter) => waiter.predicate(line));
     if (waiterIndex >= 0) {

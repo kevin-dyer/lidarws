@@ -1,5 +1,6 @@
 export const CHANNEL_LIDAR = 1;
 export const CHANNEL_TILT = 2;
+export const CHANNEL_LIDAR_TIMED = 3;
 export const CHANNEL_CONTROL = 0x7f;
 export const MAX_PAYLOAD = 1190;
 export const MAX_TILT_SPEED_DEG_S = 10;
@@ -52,29 +53,37 @@ export function decodeFrame(packet: Uint8Array): MuxFrame | null {
 export interface Ray {
   azimuthDeg: number;
   rangeM: number;
+  time?: number;
 }
 
 export class RplidarParser {
   private pending = new Uint8Array(0);
+  private pendingTimes: Array<number | undefined> = [];
   private measurementMode = false;
   private revolution: Ray[] = [];
 
   reset(): void {
     this.pending = new Uint8Array(0);
+    this.pendingTimes = [];
     this.measurementMode = false;
     this.revolution = [];
   }
 
   beginCapture(): void {
     this.pending = new Uint8Array(0);
+    this.pendingTimes = [];
     this.revolution = [];
   }
 
-  push(chunk: Uint8Array, onRevolution: (rays: Ray[]) => void): void {
+  push(chunk: Uint8Array, onRevolution: (rays: Ray[]) => void, byteTimes?: number[]): void {
+    if (byteTimes && byteTimes.length !== chunk.length) {
+      throw new Error('Each LiDAR byte must have a timestamp.');
+    }
     const joined = new Uint8Array(this.pending.length + chunk.length);
     joined.set(this.pending);
     joined.set(chunk, this.pending.length);
     this.pending = joined;
+    this.pendingTimes.push(...(byteTimes ?? Array<number | undefined>(chunk.length).fill(undefined)));
 
     if (!this.measurementMode) {
       let descriptorIndex = -1;
@@ -85,14 +94,17 @@ export class RplidarParser {
         }
       }
       if (descriptorIndex < 0) {
+        this.pendingTimes = this.pendingTimes.slice(Math.max(0, this.pending.length - 6));
         this.pending = this.pending.slice(Math.max(0, this.pending.length - 6));
         return;
       }
       if (this.pending.length < descriptorIndex + 7) {
+        this.pendingTimes = this.pendingTimes.slice(descriptorIndex);
         this.pending = this.pending.slice(descriptorIndex);
         return;
       }
       const descriptorType = this.pending[descriptorIndex + 6];
+      this.pendingTimes = this.pendingTimes.slice(descriptorIndex + 7);
       this.pending = this.pending.slice(descriptorIndex + 7);
       this.measurementMode = descriptorType === 0x81;
       if (!this.measurementMode) {
@@ -105,6 +117,8 @@ export class RplidarParser {
       const flags = this.pending[offset];
       const angleField = this.pending[offset + 1] | (this.pending[offset + 2] << 8);
       const distanceField = this.pending[offset + 3] | (this.pending[offset + 4] << 8);
+      const firstByteTime = this.pendingTimes[offset];
+      const time = firstByteTime === undefined ? undefined : firstByteTime - 10 / 115200;
       offset += 5;
 
       const sync = (flags & 1) !== 0;
@@ -119,12 +133,15 @@ export class RplidarParser {
       }
       const rangeM = distanceField / 4000;
       if (rangeM > 0) {
-        this.revolution.push({
+        const ray: Ray = {
           azimuthDeg: (angleField >> 1) / 64,
           rangeM,
-        });
+        };
+        if (time !== undefined) ray.time = time;
+        this.revolution.push(ray);
       }
     }
     this.pending = this.pending.slice(offset);
+    this.pendingTimes = this.pendingTimes.slice(offset);
   }
 }
